@@ -526,7 +526,7 @@ const TextAnalyzer: React.FC = () => {
                         className="flex flex-col items-center justify-center py-10 gap-5 select-none pointer-events-none"
                     >
                         <motion.img
-                            src="/logo2.webp"
+                            src="/logo3.png"
                             alt="HayL3ditor"
                             className="w-56 sm:w-72 object-contain"
                             style={{ filter: 'drop-shadow(0 0 20px rgba(168,85,247,0.35))' }}

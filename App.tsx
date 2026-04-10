@@ -129,7 +129,7 @@ const App: React.FC = () => {
 
         {/* Background logo watermark */}
         <motion.img
-          src="/logo2.webp"
+          src="/logo3.png"
           alt=""
           aria-hidden="true"
           className="absolute inset-0 m-auto w-[520px] max-w-[70vw] object-contain pointer-events-none select-none"
@@ -162,7 +162,7 @@ const App: React.FC = () => {
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
           >
             <img
-              src="/logo2.webp"
+              src="/logo3.png"
               alt="HayL3ditor"
               className="h-11 w-auto object-contain"
               style={{ imageRendering: 'crisp-edges' }}

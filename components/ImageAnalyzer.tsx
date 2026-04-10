@@ -1606,7 +1606,7 @@ const ImageAnalyzer: React.FC = () => {
                         className="flex flex-col items-center justify-center py-6 gap-4 select-none pointer-events-none"
                     >
                         <motion.img
-                            src="/logo2.webp"
+                            src="/logo3.png"
                             alt="HayL3ditor"
                             className="w-48 sm:w-64 object-contain"
                             animate={{
