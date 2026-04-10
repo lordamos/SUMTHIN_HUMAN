@@ -15,7 +15,7 @@ import {
     UpscaleIcon, SaveIcon, DiskIcon, PaletteIcon, CloudIcon, GoogleDriveIcon, DropboxIcon
 } from './Icons';
 
-type LoadingAction = 'analyze' | 'describe' | 'tag' | 'color' | 'edit-bg' | 'edit-watermark' | 'edit-upscale' | 'cloud' | null;
+type LoadingAction = 'analyze' | 'describe' | 'tag' | 'color' | 'smart' | 'edit-bg' | 'edit-watermark' | 'edit-upscale' | 'cloud' | null;
 
 interface BatchItem {
     id: string;
@@ -279,10 +279,12 @@ interface BatchItemCardProps {
     onEdit: () => void;
     isExporting: string | null;
     onSaveToCloud: (id: string, provider: CloudProvider) => void;
+    onSmartAnalysis: (id: string) => void;
 }
 
-const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert, onProcess, onUpdate, onDownload, onEdit, isExporting, onSaveToCloud }) => {
+const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert, onProcess, onUpdate, onDownload, onEdit, isExporting, onSaveToCloud, onSmartAnalysis }) => {
     const isLoading = !!item.loadingAction;
+    const [isHumanizingDesc, setIsHumanizingDesc] = useState(false);
 
     const handleCopyDescription = () => {
         if (!item.description) return;
@@ -290,6 +292,23 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert,
             onUpdate(item.id, { isDescriptionCopied: true });
             setTimeout(() => onUpdate(item.id, { isDescriptionCopied: false }), 2000);
         });
+    };
+
+    const handleHumanizeDescription = async () => {
+        if (!item.description) return;
+        setIsHumanizingDesc(true);
+        try {
+            const res = await fetch('/humanize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: item.description, mode: 'bypass' }),
+            });
+            const data = await res.json();
+            if (data.humanized_text) {
+                onUpdate(item.id, { description: data.humanized_text });
+            }
+        } catch {}
+        finally { setIsHumanizingDesc(false); }
     };
 
     return (
@@ -464,6 +483,13 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert,
                              <div className="scale-75 flex items-center justify-center"><MagicWandIcon /></div> 
                              {item.draft ? 'Resume' : 'Editor'}
                         </button>
+                        <button
+                            onClick={() => onSmartAnalysis(item.id)}
+                            disabled={isLoading}
+                            className="col-span-2 px-3 py-2 rounded-lg text-xs font-bold border border-teal-500/40 bg-gradient-to-r from-teal-500/20 to-blue-500/10 text-teal-300 hover:from-teal-500/30 hover:to-blue-500/20 transition-all flex items-center justify-center gap-2"
+                        >
+                            {item.loadingAction === 'smart' ? <><Spinner /> Running Pipeline...</> : '⚡ Smart Analysis'}
+                        </button>
                         <div className="flex gap-1">
                              <button
                                 onClick={() => onDownload(item)}
@@ -542,10 +568,19 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert,
                                     <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                                         <DescribeIcon /> Description
                                     </h3>
-                                    <button onClick={handleCopyDescription} className="text-xs text-gray-400 hover:text-white flex items-center gap-1">
-                                        {item.isDescriptionCopied ? <CheckIcon /> : <ClipboardIcon />}
-                                        {item.isDescriptionCopied ? 'Copied' : 'Copy'}
-                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={handleHumanizeDescription}
+                                            disabled={isHumanizingDesc || isLoading}
+                                            className="text-xs text-teal-400 hover:text-white flex items-center gap-1 px-2 py-1 rounded-lg bg-teal-500/10 border border-teal-500/20 hover:bg-teal-500/20 transition-all"
+                                        >
+                                            {isHumanizingDesc ? <><Spinner /> Rewriting...</> : '✦ Humanize'}
+                                        </button>
+                                        <button onClick={handleCopyDescription} className="text-xs text-gray-400 hover:text-white flex items-center gap-1">
+                                            {item.isDescriptionCopied ? <CheckIcon /> : <ClipboardIcon />}
+                                            {item.isDescriptionCopied ? 'Copied' : 'Copy'}
+                                        </button>
+                                    </div>
                                 </div>
                                 <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-sm text-gray-300 leading-relaxed">
                                     {item.description}
@@ -833,6 +868,48 @@ const ImageAnalyzer: React.FC = () => {
         await Promise.all(promises);
     };
 
+    const processSmartAnalysis = async (id: string) => {
+        const item = items.find(i => i.id === id);
+        if (!item) return;
+
+        setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: 'smart', error: null } : i));
+
+        try {
+            const base64Image = await getBase64FromItem(item);
+            const mimeType = item.file.type;
+
+            const [result, description, tags, colorResult] = await Promise.all([
+                analyzeImage(base64Image, mimeType),
+                describeImage(base64Image, mimeType),
+                generateImageTags(base64Image, mimeType),
+                getDominantColors(base64Image, mimeType),
+            ]);
+
+            let humanizedDescription = description;
+            try {
+                const res = await fetch('/humanize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: description, mode: 'bypass' }),
+                });
+                const data = await res.json();
+                if (data.humanized_text && !data.fallback) humanizedDescription = data.humanized_text;
+            } catch {}
+
+            setItems(prev => prev.map(i => i.id === id ? {
+                ...i,
+                loadingAction: null,
+                result,
+                description: humanizedDescription,
+                tags,
+                colorResult,
+            } : i));
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Smart analysis failed.';
+            setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, error: msg } : i));
+        }
+    };
+
     const processBatchEdit = async (editType: 'bg' | 'watermark' | 'upscale') => {
         let prompt = "";
         let actionType: LoadingAction = null;
@@ -1081,6 +1158,9 @@ const ImageAnalyzer: React.FC = () => {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                          <div className="flex flex-wrap gap-2 p-3 rounded-xl bg-black/20 border border-white/5">
                             <span className="w-full text-[10px] uppercase tracking-wider text-gray-500 font-bold px-1 mb-1">Analysis Tools</span>
+                             <button onClick={() => items.forEach(i => processSmartAnalysis(i.id))} disabled={items.some(i => !!i.loadingAction)} className="w-full px-3 py-2.5 rounded-lg bg-gradient-to-r from-teal-500/30 to-blue-500/20 text-teal-200 border border-teal-500/40 hover:from-teal-500/40 hover:to-blue-500/30 hover:scale-[1.01] transition-all text-xs font-black flex items-center justify-center gap-2">
+                                {items.some(i => i.loadingAction === 'smart') ? <><Spinner /> Running Smart Pipeline...</> : '⚡ Run Smart Analysis (All)'}
+                            </button>
                              <button onClick={() => processBatch('analyze')} disabled={items.some(i => !!i.loadingAction)} className="flex-1 px-3 py-2.5 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/30 hover:bg-teal-500/30 hover:scale-[1.02] transition-all text-xs font-bold flex items-center justify-center gap-2">
                                 {items.some(i => i.loadingAction === 'analyze') ? <Spinner /> : 'Analyze All Images'}
                             </button>
@@ -1118,6 +1198,7 @@ const ImageAnalyzer: React.FC = () => {
                             onEdit={() => setEditingItemId(item.id)}
                             isExporting={isExporting}
                             onSaveToCloud={handleSaveToCloud}
+                            onSmartAnalysis={processSmartAnalysis}
                         />
                     ))}
                 </AnimatePresence>
