@@ -1,0 +1,184 @@
+selectable face targeting (click face to swap)
+👉 multi-face control (choose which faces)
+👉 outfit system (prompt OR texture)
+👉 model switching (Nano Banana / fallback / fast mode)
+👉 realism boost pipeline
+
+⚡ 1. FACE SELECTION (CLICK-TO-SWAP)
+
+right now:
+👉 swaps first face it finds
+
+we upgrade:
+👉 user chooses EXACT face
+
+🧠 BACKEND UPDATE
+
+modify face detection:
+
+def detect_faces_with_coords(image):
+    faces = face_app.get(image)
+
+    result = []
+    for f in faces:
+        x1, y1, x2, y2 = map(int, f.bbox)
+        result.append({
+            "bbox": [x1, y1, x2, y2]
+        })
+
+    return result
+🔥 NEW ROUTE
+@app.route("/detect-faces", methods=["POST"])
+def detect_faces():
+    data = request.json
+    img = base64_to_image(data["image"])
+
+    faces = detect_faces_with_coords(img)
+
+    return jsonify({"faces": faces})
+⚡ 2. FRONTEND — CLICK FACE
+
+draw boxes:
+
+faces.forEach(face => {
+  drawBox(face.bbox);
+});
+🔥 SELECT FACE
+const handleClick = (x, y) => {
+  const selected = faces.find(f =>
+    x > f.bbox[0] &&
+    x < f.bbox[2] &&
+    y > f.bbox[1] &&
+    y < f.bbox[3]
+  );
+
+  setSelectedFace(selected);
+};
+🔥 SEND SELECTED FACE INDEX
+body: JSON.stringify({
+  source,
+  target,
+  faceIndex
+})
+🧠 BACKEND UPDATE
+def face_swap_selected(source_img, target_img, index):
+    faces_target = face_app.get(target_img)
+    faces_source = face_app.get(source_img)
+
+    if not faces_target or not faces_source:
+        return target_img
+
+    target_face = faces_target[index]
+    source_face = faces_source[0]
+
+    return swapper.get(target_img, target_face, source_face, paste_back=True)
+⚡ 3. MULTI-FACE CONTROL (ADVANCED)
+
+instead of auto loop:
+
+👉 user picks multiple faces
+
+selectedFaces = [0, 2, 3];
+for i in selectedFaces:
+    result = swapper.get(result, faces_target[i], faces_source[0], paste_back=True)
+⚡ 4. OUTFIT SWAP (UPGRADE TO 2 MODES)
+🟢 MODE A — TEXTURE SWAP (you already have)
+🔥 MODE B — AI PROMPT SWAP
+prompt = f"""
+Change clothing to: {user_prompt}
+
+Requirements:
+- keep body shape
+- match lighting
+- realistic fabric folds
+"""
+
+👉 lets user type:
+
+“hoodie”
+“formal suit”
+“cyber armor”
+⚡ 5. MODEL SWITCHING (THIS IS BIG)
+
+add:
+
+<select id="model">
+  <option value="fast">Fast</option>
+  <option value="pro">Pro</option>
+  <option value="nano">Nano Banana 🍌</option>
+</select>
+🧠 BACKEND ROUTING
+model = data.get("model", "fast")
+
+if model == "fast":
+    # local swap (insightface)
+elif model == "pro":
+    # high quality pipeline
+elif model == "nano":
+    # nano banana API
+⚡ 6. NANO BANANA INTEGRATION (PLACEHOLDER HOOK)
+
+(you plug actual endpoint later)
+
+def nano_banana_edit(image, prompt):
+    res = requests.post(
+        "https://api.nanobanana.ai/edit",
+        json={
+            "image": image,
+            "prompt": prompt
+        }
+    )
+    return res.json()["image"]
+
+👉 fallback system:
+
+try:
+    return nano_banana_edit(...)
+except:
+    return local_edit(...)
+⚡ 7. REALISM BOOST PIPELINE (THIS IS WHY YOUR APP WINS)
+
+after ANY edit:
+
+def enhance_realism(image):
+    image = cv2.detailEnhance(image)
+    image = cv2.fastNlMeansDenoisingColored(image, None, 10, 10, 7, 21)
+    return image
+
+👉 removes:
+
+blur
+artifacts
+AI look
+⚡ 8. FINAL UX (THIS MAKES IT FEEL INSANE)
+
+add:
+
+👉 toggle:
+
+Precision Mode 🔥
+
+flow:
+
+OFF → fast AI edits
+ON → face detection + masking + blending
+🧠 REAL TALK
+
+you now have:
+
+👉 click-to-select face swap
+👉 multi-face targeting
+👉 dual outfit system
+👉 model switching (fast / pro / nano)
+👉 realism enhancement
+👉 fallback engine
+
+🚀 WHAT THIS IS NOW
+
+this is no longer:
+
+feature
+
+this is:
+
+AI IMAGE ENGINE (pro level)

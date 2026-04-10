@@ -283,19 +283,51 @@ def precision_edit():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/detect-faces", methods=["POST"])
+def detect_faces_route():
+    """Detect all faces and return bounding boxes + image dimensions."""
+    try:
+        from ai_edit_engine import detect_faces_with_coords, base64_to_image
+        data = request.json or {}
+        if not data.get("image"):
+            return jsonify({"error": "Missing image."}), 400
+        img = base64_to_image(data["image"])
+        result = detect_faces_with_coords(img)
+        return jsonify(result)
+    except RuntimeError as e:
+        return jsonify({"error": str(e), "faces": []}), 422
+    except Exception as e:
+        return jsonify({"error": str(e), "faces": []}), 500
+
+
 @app.route("/face-swap", methods=["POST"])
 def face_swap_route():
-    """Single face swap: source face → target image."""
+    """Face swap: swap selected face indices (or all). Supports fast/pro/nano models."""
     try:
-        from ai_edit_engine import face_swap_single, base64_to_image, image_to_base64
+        from ai_edit_engine import (face_swap_selected, base64_to_image,
+                                    image_to_base64, enhance_realism, nano_banana_edit)
         data = request.json or {}
         if not data.get("source") or not data.get("target"):
             return jsonify({"error": "Missing source or target image."}), 400
 
+        model = data.get("model", "fast")
+        face_indices = data.get("faceIndices", [])
+
+        if model == "nano":
+            try:
+                result_b64 = nano_banana_edit(data["target"], "face swap with provided source face")
+                return jsonify({"image": result_b64, "model_used": "nano"})
+            except Exception:
+                model = "fast"
+
         source = base64_to_image(data["source"])
         target = base64_to_image(data["target"])
-        result = face_swap_single(source, target)
-        return jsonify({"image": image_to_base64(result)})
+        result = face_swap_selected(source, target, face_indices)
+
+        if model == "pro":
+            result = enhance_realism(result)
+
+        return jsonify({"image": image_to_base64(result), "model_used": model})
     except RuntimeError as e:
         return jsonify({"error": str(e), "fallback": True}), 422
     except Exception as e:
@@ -304,17 +336,25 @@ def face_swap_route():
 
 @app.route("/face-swap-multi", methods=["POST"])
 def face_swap_multi_route():
-    """Multi face swap: swap all faces in target using source faces."""
+    """Multi face swap: swap selected faces in target (legacy compat, delegates to /face-swap)."""
     try:
-        from ai_edit_engine import face_swap_multi, base64_to_image, image_to_base64
+        from ai_edit_engine import (face_swap_selected, base64_to_image,
+                                    image_to_base64, enhance_realism)
         data = request.json or {}
         if not data.get("source") or not data.get("target"):
             return jsonify({"error": "Missing source or target image."}), 400
 
+        model = data.get("model", "fast")
+        face_indices = data.get("faceIndices", [])
+
         source = base64_to_image(data["source"])
         target = base64_to_image(data["target"])
-        result = face_swap_multi(source, target)
-        return jsonify({"image": image_to_base64(result)})
+        result = face_swap_selected(source, target, face_indices)
+
+        if model in ("pro", "nano"):
+            result = enhance_realism(result)
+
+        return jsonify({"image": image_to_base64(result), "model_used": model})
     except RuntimeError as e:
         return jsonify({"error": str(e), "fallback": True}), 422
     except Exception as e:
@@ -323,16 +363,36 @@ def face_swap_multi_route():
 
 @app.route("/outfit-swap", methods=["POST"])
 def outfit_swap_route():
-    """Outfit swap: blend texture onto body region of image."""
+    """Outfit swap — Mode A: texture blend. Mode B: AI prompt (via Gemini edit)."""
     try:
-        from ai_edit_engine import outfit_swap, base64_to_image, image_to_base64
+        from ai_edit_engine import outfit_swap, base64_to_image, image_to_base64, enhance_realism
         data = request.json or {}
+        mode = data.get("mode", "texture")
+
+        if mode == "ai":
+            # AI prompt mode — use Gemini editImage via the existing helper
+            if not data.get("image"):
+                return jsonify({"error": "Missing image."}), 400
+            outfit_prompt = data.get("prompt", "a stylish outfit")
+            full_prompt = (
+                f"Change the clothing/outfit of the person to: {outfit_prompt}. "
+                "Requirements: keep body shape and pose exactly the same, "
+                "match original lighting and shadows, add realistic fabric folds and texture, "
+                "preserve face and skin tone, make it look like a real photograph."
+            )
+            return jsonify({"prompt": full_prompt, "mode": "ai_prompt"})
+
+        # Texture mode
         if not data.get("image") or not data.get("texture"):
             return jsonify({"error": "Missing image or texture."}), 400
 
         image = base64_to_image(data["image"])
         texture = base64_to_image(data["texture"])
         result = outfit_swap(image, texture)
+
+        if data.get("realism", True):
+            result = enhance_realism(result)
+
         return jsonify({"image": image_to_base64(result)})
     except Exception as e:
         return jsonify({"error": str(e)}), 500

@@ -15,7 +15,7 @@ import {
     UpscaleIcon, SaveIcon, DiskIcon, PaletteIcon, CloudIcon, GoogleDriveIcon, DropboxIcon
 } from './Icons';
 
-type LoadingAction = 'analyze' | 'describe' | 'tag' | 'color' | 'smart' | 'edit-bg' | 'edit-watermark' | 'edit-upscale' | 'cloud' | 'prompt' | 'style' | 'make-human' | 'face-swap' | 'face-swap-multi' | 'outfit-swap' | null;
+type LoadingAction = 'analyze' | 'describe' | 'tag' | 'color' | 'smart' | 'edit-bg' | 'edit-watermark' | 'edit-upscale' | 'cloud' | 'prompt' | 'style' | 'make-human' | 'face-swap' | 'face-swap-multi' | 'outfit-swap' | 'detect-faces' | null;
 
 interface BatchItem {
     id: string;
@@ -38,6 +38,8 @@ interface BatchItem {
     showSuccess: boolean; 
     draft: ImageDraftState | null;
     precisionMode: boolean;
+    detectedFaces?: {index: number; bbox: [number, number, number, number]}[];
+    imgOrigDims?: {w: number; h: number};
 }
 
 const filters = [
@@ -287,24 +289,106 @@ interface BatchItemCardProps {
     onGeneratePrompt: (id: string) => void;
     onClassifyStyle: (id: string) => void;
     onMakeHuman: (id: string) => void;
-    onFaceSwap: (id: string, sourceB64: string, mode: 'single' | 'multi') => void;
-    onOutfitSwap: (id: string, textureB64: string) => void;
+    onFaceSwap: (id: string, sourceB64: string, faceIndices: number[], model: string) => void;
+    onOutfitSwap: (id: string, textureOrPrompt: string, mode: 'texture' | 'ai', model: string) => void;
+    onDetectFaces: (id: string) => void;
 }
 
-const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert, onProcess, onUpdate, onDownload, onEdit, isExporting, onSaveToCloud, onSmartAnalysis, onGeneratePrompt, onClassifyStyle, onMakeHuman, onFaceSwap, onOutfitSwap }) => {
+const BatchItemCard: React.FC<BatchItemCardProps> = ({
+    item, onRemove, onRevert, onProcess, onUpdate, onDownload, onEdit,
+    isExporting, onSaveToCloud, onSmartAnalysis, onGeneratePrompt,
+    onClassifyStyle, onMakeHuman, onFaceSwap, onOutfitSwap, onDetectFaces
+}) => {
     const isLoading = !!item.loadingAction;
     const [isHumanizingDesc, setIsHumanizingDesc] = useState(false);
-    const [swapMode, setSwapMode] = useState<'single' | 'multi'>('single');
+    const [swapModel, setSwapModel] = useState<'fast' | 'pro' | 'nano'>('fast');
+    const [selectedFaceIndices, setSelectedFaceIndices] = useState<number[]>([]);
+    const [outfitMode, setOutfitMode] = useState<'texture' | 'ai'>('texture');
+    const [aiOutfitPrompt, setAiOutfitPrompt] = useState('');
     const faceSwapInputRef = useRef<HTMLInputElement>(null);
     const outfitSwapInputRef = useRef<HTMLInputElement>(null);
+    const faceCanvasRef = useRef<HTMLCanvasElement>(null);
+    const imageContainerRef = useRef<HTMLDivElement>(null);
+
+    // Draw face bounding boxes on canvas whenever detectedFaces changes
+    useEffect(() => {
+        const canvas = faceCanvasRef.current;
+        const container = imageContainerRef.current;
+        if (!canvas || !container) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const { offsetWidth: cw, offsetHeight: ch } = container;
+        canvas.width = cw;
+        canvas.height = ch;
+        ctx.clearRect(0, 0, cw, ch);
+
+        const faces = item.detectedFaces;
+        const dims = item.imgOrigDims;
+        if (!faces || !dims || faces.length === 0) return;
+
+        const scaleX = cw / dims.w;
+        const scaleY = ch / dims.h;
+
+        faces.forEach(f => {
+            const [x1, y1, x2, y2] = f.bbox;
+            const sx = x1 * scaleX, sy = y1 * scaleY;
+            const sw = (x2 - x1) * scaleX, sh = (y2 - y1) * scaleY;
+            const isSelected = selectedFaceIndices.includes(f.index);
+
+            ctx.strokeStyle = isSelected ? '#10b981' : '#f59e0b';
+            ctx.lineWidth = isSelected ? 3 : 2;
+            ctx.shadowColor = isSelected ? '#10b981' : '#f59e0b';
+            ctx.shadowBlur = 8;
+            ctx.strokeRect(sx, sy, sw, sh);
+
+            ctx.fillStyle = isSelected ? 'rgba(16,185,129,0.25)' : 'rgba(245,158,11,0.15)';
+            ctx.fillRect(sx, sy, sw, sh);
+
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = isSelected ? '#10b981' : '#f59e0b';
+            ctx.font = 'bold 11px monospace';
+            ctx.fillText(`Face ${f.index + 1}${isSelected ? ' ✓' : ''}`, sx + 4, sy + 14);
+        });
+    }, [item.detectedFaces, selectedFaceIndices, item.imgOrigDims]);
+
+    // Reset selected faces when image changes
+    useEffect(() => {
+        setSelectedFaceIndices([]);
+    }, [item.preview]);
+
+    const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        const canvas = faceCanvasRef.current;
+        const dims = item.imgOrigDims;
+        const faces = item.detectedFaces;
+        if (!canvas || !dims || !faces || faces.length === 0) return;
+
+        const rect = canvas.getBoundingClientRect();
+        const px = (e.clientX - rect.left) * (canvas.width / rect.width);
+        const py = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+        const scaleX = canvas.width / dims.w;
+        const scaleY = canvas.height / dims.h;
+
+        const clicked = faces.find(f => {
+            const [x1, y1, x2, y2] = f.bbox;
+            return px >= x1 * scaleX && px <= x2 * scaleX &&
+                   py >= y1 * scaleY && py <= y2 * scaleY;
+        });
+
+        if (clicked) {
+            setSelectedFaceIndices(prev =>
+                prev.includes(clicked.index)
+                    ? prev.filter(i => i !== clicked.index)
+                    : [...prev, clicked.index]
+            );
+        }
+    };
 
     const readFileAsBase64 = (file: File): Promise<string> =>
         new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.onload = () => {
-                const result = reader.result as string;
-                resolve(result.split(',')[1]);
-            };
+            reader.onload = () => resolve((reader.result as string).split(',')[1]);
             reader.onerror = reject;
             reader.readAsDataURL(file);
         });
@@ -313,7 +397,7 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert,
         const file = e.target.files?.[0];
         if (!file) return;
         const b64 = await readFileAsBase64(file);
-        onFaceSwap(item.id, b64, swapMode);
+        onFaceSwap(item.id, b64, selectedFaceIndices, swapModel);
         e.target.value = '';
     };
 
@@ -321,7 +405,7 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert,
         const file = e.target.files?.[0];
         if (!file) return;
         const b64 = await readFileAsBase64(file);
-        onOutfitSwap(item.id, b64);
+        onOutfitSwap(item.id, b64, 'texture', swapModel);
         e.target.value = '';
     };
 
@@ -370,7 +454,17 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert,
             {item.precisionMode && <div className="absolute -inset-px rounded-3xl pointer-events-none" style={{ background: 'transparent', boxShadow: '0 0 30px -5px rgba(251,146,60,0.15) inset' }} />}
             <div className="p-5 flex flex-col lg:flex-row gap-6 items-start">
                 <div className="w-full lg:w-1/3 flex flex-col gap-4">
-                    <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black/40 aspect-square lg:aspect-auto group/image min-h-[250px] lg:h-auto">
+                    <div ref={imageContainerRef} className="relative rounded-2xl overflow-hidden border border-white/10 bg-black/40 aspect-square lg:aspect-auto group/image min-h-[250px] lg:h-auto">
+                        {/* Face detection canvas overlay */}
+                        {item.detectedFaces && item.detectedFaces.length > 0 && (
+                            <canvas
+                                ref={faceCanvasRef}
+                                onClick={handleCanvasClick}
+                                className="absolute inset-0 z-20 cursor-crosshair"
+                                style={{ width: '100%', height: '100%' }}
+                                title="Click a face to select/deselect it"
+                            />
+                        )}
                         <AnimatePresence>
                             {(item.loadingAction && item.loadingAction.startsWith('edit')) && (
                                 <motion.div 
@@ -541,15 +635,59 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert,
 
                     {/* ── SECTION: Swap Engine ── */}
                     <div className="rounded-2xl overflow-hidden border border-white/[0.06]" style={{ background: 'rgba(16,185,129,0.04)' }}>
+                        {/* Header + Model Switcher */}
                         <div className="px-3 py-1.5 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
                             <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500/70">🔄 Swap Engine</span>
-                            <div className="flex items-center gap-1">
-                                <button onClick={() => setSwapMode('single')} className={`text-[9px] font-bold px-2 py-0.5 rounded-full transition-all ${swapMode === 'single' ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/40' : 'text-gray-500 hover:text-emerald-400'}`}>1 Face</button>
-                                <button onClick={() => setSwapMode('multi')} className={`text-[9px] font-bold px-2 py-0.5 rounded-full transition-all ${swapMode === 'multi' ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/40' : 'text-gray-500 hover:text-emerald-400'}`}>All Faces</button>
-                            </div>
+                            <select
+                                value={swapModel}
+                                onChange={e => setSwapModel(e.target.value as 'fast' | 'pro' | 'nano')}
+                                className="text-[9px] font-bold rounded-md px-1.5 py-0.5 border border-white/10 bg-black/40 text-gray-300 cursor-pointer"
+                            >
+                                <option value="fast">⚡ Fast</option>
+                                <option value="pro">🔥 Pro (Realism+)</option>
+                                <option value="nano">🍌 Nano Banana</option>
+                            </select>
                         </div>
-                        <div className="p-2 flex flex-col gap-1.5">
-                            <p className="text-[9px] text-gray-600 px-1">Select a source image to swap from</p>
+
+                        <div className="p-2 flex flex-col gap-2">
+                            {/* Detect Faces */}
+                            <button
+                                onClick={() => onDetectFaces(item.id)}
+                                disabled={isLoading}
+                                className="w-full px-2 py-1.5 rounded-xl text-[10px] font-bold border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-all flex items-center justify-center gap-1.5"
+                            >
+                                {item.loadingAction === ('detect-faces' as LoadingAction)
+                                    ? <><Spinner /> Detecting...</>
+                                    : item.detectedFaces
+                                        ? `🎯 ${item.detectedFaces.length} face${item.detectedFaces.length !== 1 ? 's' : ''} detected — click to re-scan`
+                                        : '🎯 Detect Faces (click-to-select)'}
+                            </button>
+
+                            {/* Face selection summary */}
+                            {item.detectedFaces && item.detectedFaces.length > 0 && (
+                                <div className="flex flex-wrap gap-1 px-0.5">
+                                    {item.detectedFaces.map(f => (
+                                        <button
+                                            key={f.index}
+                                            onClick={() => setSelectedFaceIndices(prev =>
+                                                prev.includes(f.index) ? prev.filter(i => i !== f.index) : [...prev, f.index]
+                                            )}
+                                            className={`text-[9px] font-bold px-2 py-0.5 rounded-full border transition-all ${
+                                                selectedFaceIndices.includes(f.index)
+                                                    ? 'bg-emerald-500/30 text-emerald-300 border-emerald-500/50'
+                                                    : 'bg-white/[0.04] text-gray-500 border-white/10 hover:text-amber-300 hover:border-amber-500/30'
+                                            }`}
+                                        >
+                                            Face {f.index + 1} {selectedFaceIndices.includes(f.index) ? '✓' : ''}
+                                        </button>
+                                    ))}
+                                    {selectedFaceIndices.length > 0 && (
+                                        <button onClick={() => setSelectedFaceIndices([])} className="text-[9px] text-red-400/70 hover:text-red-400 px-1">✕ clear</button>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Face Swap button */}
                             <button
                                 onClick={() => faceSwapInputRef.current?.click()}
                                 disabled={isLoading}
@@ -557,16 +695,44 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert,
                                 style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(6,182,212,0.1))' }}
                             >
                                 {item.loadingAction === 'face-swap' || item.loadingAction === 'face-swap-multi'
-                                    ? <><Spinner /> Swapping Faces...</>
-                                    : `👤 Face Swap (${swapMode === 'single' ? 'Single' : 'All Faces'})`}
+                                    ? <><Spinner /> Swapping{swapModel === 'pro' ? ' + Realism Boost' : ''}...</>
+                                    : `👤 Face Swap ${selectedFaceIndices.length > 0 ? `(${selectedFaceIndices.length} selected)` : '(all faces)'}`}
                             </button>
-                            <button
-                                onClick={() => outfitSwapInputRef.current?.click()}
-                                disabled={isLoading}
-                                className="w-full px-2 py-2 rounded-xl text-xs font-bold border border-cyan-500/20 bg-white/[0.04] text-gray-400 hover:bg-cyan-500/10 hover:text-cyan-300 hover:border-cyan-500/30 transition-all flex items-center justify-center gap-1.5"
-                            >
-                                {item.loadingAction === 'outfit-swap' ? <><Spinner /> Swapping Outfit...</> : '👕 Outfit Swap (select texture)'}
-                            </button>
+
+                            {/* Outfit Swap */}
+                            <div className="rounded-xl border border-white/[0.06] overflow-hidden">
+                                <div className="flex border-b border-white/[0.06]">
+                                    <button onClick={() => setOutfitMode('texture')} className={`flex-1 py-1 text-[9px] font-bold transition-all ${outfitMode === 'texture' ? 'bg-cyan-500/20 text-cyan-300' : 'text-gray-500 hover:text-cyan-400'}`}>🖼 Texture</button>
+                                    <button onClick={() => setOutfitMode('ai')} className={`flex-1 py-1 text-[9px] font-bold transition-all ${outfitMode === 'ai' ? 'bg-purple-500/20 text-purple-300' : 'text-gray-500 hover:text-purple-400'}`}>✨ AI Prompt</button>
+                                </div>
+                                {outfitMode === 'texture' ? (
+                                    <button
+                                        onClick={() => outfitSwapInputRef.current?.click()}
+                                        disabled={isLoading}
+                                        className="w-full px-2 py-2 text-xs font-bold text-gray-400 hover:text-cyan-300 transition-all flex items-center justify-center gap-1.5 bg-white/[0.02] hover:bg-cyan-500/10"
+                                    >
+                                        {item.loadingAction === 'outfit-swap' ? <><Spinner /> Swapping Outfit...</> : '👕 Select texture image'}
+                                    </button>
+                                ) : (
+                                    <div className="p-2 flex flex-col gap-1.5">
+                                        <input
+                                            type="text"
+                                            placeholder="e.g. hoodie, cyber armor, formal suit..."
+                                            value={aiOutfitPrompt}
+                                            onChange={e => setAiOutfitPrompt(e.target.value)}
+                                            className="w-full px-2 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-xs text-gray-300 placeholder-gray-600 focus:outline-none focus:border-purple-500/40"
+                                        />
+                                        <button
+                                            onClick={() => aiOutfitPrompt.trim() && onOutfitSwap(item.id, aiOutfitPrompt, 'ai', swapModel)}
+                                            disabled={isLoading || !aiOutfitPrompt.trim()}
+                                            className="w-full py-1.5 rounded-lg text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/30 transition-all flex items-center justify-center gap-1 disabled:opacity-40"
+                                        >
+                                            {item.loadingAction === 'outfit-swap' ? <><Spinner /> Applying...</> : '✨ Apply AI Outfit'}
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
                             <input ref={faceSwapInputRef} type="file" className="hidden" accept="image/png,image/jpeg,image/webp" onChange={handleFaceSwapFileSelect} />
                             <input ref={outfitSwapInputRef} type="file" className="hidden" accept="image/png,image/jpeg,image/webp" onChange={handleOutfitSwapFileSelect} />
                         </div>
@@ -1128,18 +1294,42 @@ const ImageAnalyzer: React.FC = () => {
         }
     };
 
-    const handleFaceSwap = async (id: string, sourceB64: string, mode: 'single' | 'multi') => {
+    const handleDetectFaces = async (id: string) => {
         const item = items.find(i => i.id === id);
         if (!item) return;
-        const action: LoadingAction = mode === 'single' ? 'face-swap' : 'face-swap-multi';
-        setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: action, error: null } : i));
+        setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: 'detect-faces', error: null } : i));
         try {
-            const targetB64 = await getBase64FromItem(item);
-            const endpoint = mode === 'single' ? '/face-swap' : '/face-swap-multi';
-            const res = await fetch(endpoint, {
+            const imageB64 = await getBase64FromItem(item);
+            const res = await fetch('/detect-faces', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ source: sourceB64, target: targetB64 }),
+                body: JSON.stringify({ image: imageB64 }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Face detection failed.');
+            setItems(prev => prev.map(i => i.id === id ? {
+                ...i,
+                loadingAction: null,
+                detectedFaces: data.faces || [],
+                imgOrigDims: { w: data.img_w, h: data.img_h },
+                error: data.faces?.length === 0 ? 'No faces detected in this image.' : null,
+            } : i));
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Face detection failed.';
+            setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, error: msg } : i));
+        }
+    };
+
+    const handleFaceSwap = async (id: string, sourceB64: string, faceIndices: number[], model: string) => {
+        const item = items.find(i => i.id === id);
+        if (!item) return;
+        setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: 'face-swap', error: null } : i));
+        try {
+            const targetB64 = await getBase64FromItem(item);
+            const res = await fetch('/face-swap', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source: sourceB64, target: targetB64, faceIndices, model }),
             });
             const data = await res.json();
             if (!res.ok || data.error) throw new Error(data.error || 'Face swap failed.');
@@ -1148,6 +1338,8 @@ const ImageAnalyzer: React.FC = () => {
                 loadingAction: null,
                 preview: `data:image/png;base64,${data.image}`,
                 isEdited: true,
+                detectedFaces: undefined,
+                imgOrigDims: undefined,
                 error: null,
             } : i));
         } catch (err) {
@@ -1156,25 +1348,43 @@ const ImageAnalyzer: React.FC = () => {
         }
     };
 
-    const handleOutfitSwap = async (id: string, textureB64: string) => {
+    const handleOutfitSwap = async (id: string, textureOrPrompt: string, mode: 'texture' | 'ai', model: string) => {
         const item = items.find(i => i.id === id);
         if (!item) return;
         setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: 'outfit-swap', error: null } : i));
         try {
             const imageB64 = await getBase64FromItem(item);
+
+            if (mode === 'ai') {
+                // Get enhanced prompt from backend, then run Gemini editImage
+                const res = await fetch('/outfit-swap', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageB64, mode: 'ai', prompt: textureOrPrompt }),
+                });
+                const data = await res.json();
+                if (!res.ok || data.error) throw new Error(data.error || 'Outfit AI failed.');
+                const editedB64 = await editImage(imageB64, item.file.type, data.prompt);
+                setItems(prev => prev.map(i => i.id === id ? {
+                    ...i, loadingAction: null,
+                    preview: `data:${item.file.type};base64,${editedB64}`,
+                    isEdited: true, error: null,
+                } : i));
+                return;
+            }
+
+            // Texture mode
             const res = await fetch('/outfit-swap', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image: imageB64, texture: textureB64 }),
+                body: JSON.stringify({ image: imageB64, texture: textureOrPrompt, mode: 'texture' }),
             });
             const data = await res.json();
             if (!res.ok || data.error) throw new Error(data.error || 'Outfit swap failed.');
             setItems(prev => prev.map(i => i.id === id ? {
-                ...i,
-                loadingAction: null,
+                ...i, loadingAction: null,
                 preview: `data:image/png;base64,${data.image}`,
-                isEdited: true,
-                error: null,
+                isEdited: true, error: null,
             } : i));
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Outfit swap failed.';
@@ -1479,6 +1689,7 @@ const ImageAnalyzer: React.FC = () => {
                             onMakeHuman={handleMakeHuman}
                             onFaceSwap={handleFaceSwap}
                             onOutfitSwap={handleOutfitSwap}
+                            onDetectFaces={handleDetectFaces}
                         />
                     ))}
                 </AnimatePresence>
