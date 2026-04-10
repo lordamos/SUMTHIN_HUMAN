@@ -1,170 +1,215 @@
 import React, { useState } from 'react';
-import { 
-  AlertCircle, 
-  CheckCircle2, 
-  ChevronRight, 
-  Settings, 
-  FileText, 
-  Image as ImageIcon,
+import {
+  Brain,
+  Upload,
+  Cloud,
+  X,
+  Volume2,
+  Sparkles,
+  ChevronDown,
   Wand2,
-  Type,
-  Activity
+  Clock,
+  PenTool,
+  Image as ImageIcon,
+  User,
+  AlertTriangle,
 } from 'lucide-react';
 
 export function AccessibilityReadability() {
   const [text, setText] = useState('');
-  const [isFocused, setIsFocused] = useState(false);
 
   return (
-    <div className="min-h-screen bg-[#06060c] text-[#f8f8f8] font-sans selection:bg-pink-500/30">
-      {/* Accessibility focus: dark neon aesthetic, but ensuring contrast.
-          #06060c background
-          Text is #f8f8f8 for primary, #cccccc for secondary (high contrast)
-      */}
-      
-      <header className="border-b border-purple-500/20 bg-[#06060c]/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-[#06060c] text-white font-sans flex flex-col p-4 md:p-8">
+      <div className="w-full max-w-5xl mx-auto flex flex-col gap-8">
+        {/* 1. Header bar */}
+        <header className="flex items-center justify-between pb-4 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-[0_0_15px_rgba(236,72,153,0.5)]">
-              <Wand2 className="w-6 h-6 text-white" aria-hidden="true" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#ec4899] to-[#a855f7] flex items-center justify-center shadow-[0_0_15px_rgba(236,72,153,0.3)]">
+              <Brain className="w-6 h-6 text-white" aria-hidden="true" />
             </div>
             <div>
-              <h1 className="text-[24px] font-bold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-pink-400 to-purple-400">
-                HAYLE EDITOR
+              <h1 className="text-[20px] font-bold bg-clip-text text-transparent bg-gradient-to-r from-[#ec4899] to-[#a855f7]">
+                HayL3ditor
               </h1>
-              <p className="text-[14px] text-[#cccccc] font-medium tracking-wide">AI Humanization Engine</p>
-            </div>
-          </div>
-          <nav>
-            <ul className="flex items-center gap-6">
-              <li>
-                <a href="#" className="flex items-center gap-2 text-[15px] font-medium text-pink-400 hover:text-pink-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06060c] rounded px-2 py-1 transition-all">
-                  <FileText className="w-4 h-4" aria-hidden="true" />
-                  <span>Text Editor</span>
-                </a>
-              </li>
-              <li>
-                <a href="#" className="flex items-center gap-2 text-[15px] font-medium text-[#cccccc] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06060c] rounded px-2 py-1 transition-all">
-                  <ImageIcon className="w-4 h-4" aria-hidden="true" />
-                  <span>Image Editor</span>
-                </a>
-              </li>
-              <li>
-                <a href="#" className="flex items-center gap-2 text-[15px] font-medium text-[#cccccc] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06060c] rounded px-2 py-1 transition-all">
-                  <Settings className="w-4 h-4" aria-hidden="true" />
-                  <span>Settings</span>
-                </a>
-              </li>
-            </ul>
-          </nav>
-        </div>
-      </header>
-
-      <main className="max-w-4xl mx-auto px-6 py-12">
-        <div className="mb-10">
-          <h2 className="text-[32px] font-bold leading-[1.3] mb-3 flex items-center gap-3">
-            <Type className="w-8 h-8 text-pink-500" aria-hidden="true" />
-            Humanize Text
-          </h2>
-          <p className="text-[16px] text-[#cccccc] leading-[1.6] max-w-2xl">
-            Paste your AI-generated text below. Our engine will rewrite it to bypass detectors while maintaining your original meaning and tone.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-6">
-            <div className="space-y-2">
-              <label htmlFor="input-text" className="block text-[15px] font-semibold text-[#f8f8f8] flex items-center gap-2">
-                Input Content
-                <span className="text-[12px] font-normal text-pink-400 px-2 py-0.5 rounded-full bg-pink-500/10 border border-pink-500/20">Required</span>
-              </label>
-              
-              <div className={`relative rounded-xl border-2 transition-all duration-200 bg-[#0a0a10] ${isFocused ? 'border-pink-500 shadow-[0_0_20px_rgba(236,72,153,0.15)] ring-4 ring-pink-500/20' : 'border-[#333344] hover:border-[#444455]'}`}>
-                <textarea
-                  id="input-text"
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  onFocus={() => setIsFocused(true)}
-                  onBlur={() => setIsFocused(false)}
-                  placeholder="Paste text here to begin humanization..."
-                  className="w-full h-64 bg-transparent text-[16px] leading-[1.6] text-[#f8f8f8] placeholder:text-[#888899] placeholder:font-light p-5 resize-y focus:outline-none"
-                  aria-describedby="text-help"
-                />
-                
-                {/* Warning state demonstration */}
-                {text.length > 0 && text.length < 50 && (
-                  <div className="absolute bottom-4 left-4 right-4 bg-orange-500/10 border border-orange-500/50 rounded-lg p-3 flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-orange-400 shrink-0 mt-0.5" aria-hidden="true" />
-                    <div>
-                      <p className="text-[14px] font-medium text-orange-200">Text too short</p>
-                      <p className="text-[14px] text-orange-200/80 leading-[1.5] mt-1">Please provide at least 50 characters for optimal humanization results.</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <p id="text-help" className="text-[13px] text-[#bbbbcc] flex items-center gap-1.5 mt-2">
-                <CheckCircle2 className="w-4 h-4 text-purple-400" aria-hidden="true" />
-                Supports up to 10,000 characters per request.
+              <p className="text-[14px] text-gray-300 tracking-wider font-semibold">
+                HAYLE EDITOR
               </p>
             </div>
+          </div>
 
-            <button 
-              className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-bold text-[16px] flex items-center justify-center gap-3 transition-all focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-pink-500 focus-visible:ring-offset-2 focus-visible:ring-offset-[#06060c] shadow-[0_4px_20px_rgba(168,85,247,0.4)] active:scale-[0.98]"
-              aria-label="Start humanization process"
-            >
-              <Wand2 className="w-5 h-5" aria-hidden="true" />
-              <span>Humanize Content Now</span>
-              <ChevronRight className="w-5 h-5 opacity-70" aria-hidden="true" />
+          <div className="hidden md:block">
+            <h2 className="text-[#ec4899] font-bold tracking-[0.2em] text-[15px]">
+              AI FORENSICS
+            </h2>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
+              <span className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse" aria-hidden="true"></span>
+              <span className="text-[14px] font-medium text-gray-200">LIVE</span>
+            </div>
+            <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-full border border-white/10">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#818cf8]" aria-hidden="true"></span>
+              <span className="text-[14px] font-medium text-gray-200">AI READY</span>
+            </div>
+            <div className="text-[14px] text-gray-300 font-medium">12:45 PM</div>
+            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-[#a855f7] to-[#818cf8] border-2 border-[#06060c] ring-2 ring-white/20" aria-label="User Avatar"></div>
+          </div>
+        </header>
+
+        {/* 2. Tab bar */}
+        <div className="flex gap-2 border-b border-white/10">
+          <button className="flex items-center gap-2 px-6 py-3 border-b-2 border-[#ec4899] text-[#ec4899] font-semibold text-[15px] bg-[#ec4899]/10 rounded-t-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ec4899]">
+            <PenTool className="w-5 h-5" aria-hidden="true" />
+            Text Analyzer
+          </button>
+          <button className="flex items-center gap-2 px-6 py-3 text-gray-400 font-medium text-[15px] hover:text-gray-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400 rounded-t-lg">
+            <ImageIcon className="w-5 h-5" aria-hidden="true" />
+            Image Analyzer
+          </button>
+        </div>
+
+        {/* 3. Main Panel */}
+        <div className="bg-[#0f0f17] border-2 border-[#a855f7] rounded-2xl p-6 shadow-[0_0_30px_rgba(168,85,247,0.15)] flex flex-col gap-4">
+          <div className="flex justify-between items-center">
+            <h3 className="text-[15px] font-semibold text-gray-200">
+              Text Input
+            </h3>
+            <button className="flex items-center gap-2 text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 px-4 py-2 rounded-lg transition-colors border border-white/10 text-[14px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400">
+              <Clock className="w-5 h-5" aria-hidden="true" />
+              History
             </button>
           </div>
 
-          <div className="space-y-6">
-            <div className="bg-[#0a0a10] border border-[#333344] rounded-xl p-6 shadow-xl">
-              <h3 className="text-[18px] font-semibold flex items-center gap-2 mb-6 border-b border-[#333344] pb-4">
-                <Activity className="w-5 h-5 text-indigo-400" aria-hidden="true" />
-                Analysis Readout
-              </h3>
-              
-              <div className="space-y-8">
-                <div>
-                  <div className="flex justify-between items-end mb-2">
-                    <span className="text-[15px] font-medium text-[#cccccc]">AI Probability</span>
-                    <span className="text-[24px] font-bold text-pink-400" aria-label="87 percent AI detected">87<span className="text-[16px] text-pink-400/70">%</span></span>
-                  </div>
-                  {/* Gauge with clear visual AND numeric context */}
-                  <div className="h-3 w-full bg-[#1a1a24] rounded-full overflow-hidden" role="progressbar" aria-valuenow={87} aria-valuemin={0} aria-valuemax={100}>
-                    <div className="h-full bg-gradient-to-r from-pink-500 to-red-500 w-[87%] rounded-full relative">
-                      <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTAgMjBMMjAgMEwyMCAyMEgwWiIgZmlsbD0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIi8+PC9zdmc+')] opacity-30"></div>
-                    </div>
-                  </div>
-                  <p className="text-[13px] text-[#aaaaaa] mt-2">Highly likely to be AI-generated</p>
-                </div>
+          <div className="relative flex flex-col gap-2">
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              className="w-full min-h-[250px] bg-[#06060c] border-2 border-white/20 rounded-xl p-5 text-[16px] text-[#f8f8f8] placeholder:text-gray-400 placeholder:opacity-60 focus:outline-none focus:border-[#a855f7] focus:ring-2 focus:ring-[#a855f7]/50 resize-y"
+              placeholder="Paste text for forensic analysis..."
+              aria-label="Text to analyze"
+            ></textarea>
 
-                <div>
-                  <div className="flex justify-between items-end mb-2">
-                    <span className="text-[15px] font-medium text-[#cccccc]">Readability Score</span>
-                    <span className="text-[24px] font-bold text-purple-400" aria-label="Grade level 12">12<span className="text-[16px] text-purple-400/70">.4</span></span>
-                  </div>
-                  <div className="h-3 w-full bg-[#1a1a24] rounded-full overflow-hidden" role="progressbar" aria-valuenow={65} aria-valuemin={0} aria-valuemax={100}>
-                    <div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 w-[65%] rounded-full"></div>
-                  </div>
-                  <p className="text-[13px] text-[#aaaaaa] mt-2">College level reading difficulty</p>
-                </div>
-              </div>
+            <div className="absolute bottom-4 right-4 flex gap-3">
+              <button className="flex items-center gap-2 bg-[#1e1e2e]/90 hover:bg-[#2a2a3c] text-white px-4 py-2.5 rounded-lg backdrop-blur-md transition-colors border border-white/20 text-[14px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400">
+                <Volume2 className="w-5 h-5" aria-hidden="true" />
+                Audio Reader
+              </button>
+              <button className="flex items-center gap-2 bg-[#1e1e2e]/90 hover:bg-[#2a2a3c] text-white px-4 py-2.5 rounded-lg backdrop-blur-md transition-colors border border-white/20 text-[14px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ec4899]">
+                <Sparkles className="w-5 h-5 text-[#ec4899]" aria-hidden="true" />
+                Auto-Predict
+              </button>
             </div>
+          </div>
+          <div className="text-[14px] text-gray-400 font-medium">
+            Tip: paste or type up to 20,000 characters
+          </div>
 
-            <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-5">
-              <h4 className="text-[15px] font-semibold text-indigo-300 flex items-center gap-2 mb-2">
-                <CheckCircle2 className="w-4 h-4" aria-hidden="true" />
-                Accessibility Note
-              </h4>
-              <p className="text-[14px] text-indigo-200/80 leading-[1.6]">
-                This interface uses high-contrast text, semantic HTML, and visible focus indicators. The font sizes are large and line heights are generous to prevent eye strain.
-              </p>
+          <div className="flex justify-between items-center pt-4">
+            <div className="flex gap-4">
+              <button className="flex items-center gap-2 text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 px-4 py-2.5 rounded-lg transition-colors border border-white/10 text-[14px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400">
+                <Upload className="w-5 h-5" aria-hidden="true" />
+                Local File
+              </button>
+              <button className="flex items-center gap-2 text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 px-4 py-2.5 rounded-lg transition-colors border border-white/10 text-[14px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400">
+                <Cloud className="w-5 h-5" aria-hidden="true" />
+                Cloud
+              </button>
+              <button 
+                onClick={() => setText('')}
+                className="flex items-center gap-2 text-[#ef4444] hover:text-[#f87171] bg-[#ef4444]/10 hover:bg-[#ef4444]/20 px-4 py-2.5 rounded-lg transition-colors border border-[#ef4444]/30 text-[14px] font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ef4444]"
+              >
+                <X className="w-5 h-5" aria-hidden="true" />
+                Clear
+              </button>
+            </div>
+            <div className="text-[14px] font-medium text-[#d1d5db]">
+              {text.trim().split(/\s+/).filter(w => w.length > 0).length} Words | {text.length}/20000 Chars
             </div>
           </div>
         </div>
-      </main>
+
+        {/* 4. Action buttons */}
+        <div className="flex flex-col gap-8">
+          <div className="flex flex-wrap items-end gap-6">
+            <button className="bg-[#1e1e2e] hover:bg-[#2a2a3c] text-white px-8 py-4 rounded-xl font-bold text-[16px] border-2 border-[#1e1e2e] focus:outline-none focus:ring-[3px] focus:ring-[#ec4899] focus:ring-offset-2 focus:ring-offset-[#06060c] transition-all flex items-center gap-2">
+              <Brain className="w-5 h-5" aria-hidden="true" />
+              Analyze Text
+            </button>
+
+            <div className="flex items-end gap-0 shadow-[0_0_20px_rgba(236,72,153,0.2)] rounded-xl">
+              <button className="bg-gradient-to-r from-[#ec4899] to-[#a855f7] hover:opacity-90 text-white px-8 py-4 rounded-l-xl font-bold text-[16px] transition-opacity flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white">
+                <User className="w-5 h-5" aria-hidden="true" />
+                Humanize
+              </button>
+              <div className="flex flex-col bg-[#1e1e2e] border border-white/20 rounded-r-xl border-l-0 px-4 py-2 h-[56px] justify-center">
+                <span className="text-[13px] text-gray-300 font-medium leading-none mb-1" id="tone-label">
+                  Tone:
+                </span>
+                <button 
+                  className="text-white text-[15px] font-semibold flex items-center gap-1 leading-none hover:text-pink-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 rounded"
+                  aria-labelledby="tone-label"
+                >
+                  Casual <ChevronDown className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <button className="bg-[#1e1e2e] hover:bg-[#2a2a3c] text-white px-8 py-4 rounded-xl font-bold text-[16px] border-2 border-white/10 transition-colors flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400">
+                <User className="w-5 h-5" aria-hidden="true" />
+                Train AI Style
+              </button>
+              <span className="text-[14px] text-gray-400 px-2 font-medium">
+                Personalize AI to your voice
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-[#ef4444] bg-[#ef4444]/10 border-2 border-[#ef4444]/30 px-5 py-4 rounded-xl w-fit">
+            <AlertTriangle className="w-6 h-6" aria-hidden="true" />
+            <span className="text-[15px] font-semibold">
+              ⚠ AI Score: N/A — run analysis first
+            </span>
+          </div>
+
+          {/* 5. Secondary */}
+          <div>
+            <button className="flex items-center gap-2 text-gray-200 hover:text-white bg-[#1e1e2e] hover:bg-[#2a2a3c] px-6 py-3.5 rounded-xl transition-colors border-2 border-white/10 text-[15px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-400">
+              <Wand2 className="w-5 h-5" aria-hidden="true" />
+              Fix Spelling & Grammar <ChevronDown className="w-5 h-5 ml-1" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        {/* 6. Empty state */}
+        {!text && (
+          <div className="bg-[#0f0f17] border-2 border-white/10 rounded-2xl p-12 flex flex-col items-center justify-center gap-4 py-24 mt-4">
+            <div className="w-20 h-20 rounded-2xl bg-[#1e1e2e] flex items-center justify-center border border-white/10 mb-2">
+              <Brain className="w-10 h-10 text-gray-400" aria-hidden="true" />
+            </div>
+            <h3 className="text-[#ec4899] font-bold tracking-[0.2em] text-[16px]">
+              AI FORENSICS
+            </h3>
+            <p className="text-[16px] text-gray-300 font-medium">
+              Paste text above to begin forensic analysis...
+            </p>
+          </div>
+        )}
+
+        {/* Tradeoff caption */}
+        <div className="mt-8 text-center text-[15px] text-gray-400 italic font-medium">
+          ↑ Accessibility Mode — All labels visible, contrast boosted; slightly more space used
+        </div>
+
+        {/* 7. Footer */}
+        <footer className="flex justify-between items-center mt-8 border-t-2 border-white/10 pt-8 pb-4">
+          <div className="text-[15px] text-gray-400 font-semibold">
+            © 2025 HayL3ditor
+          </div>
+          <div className="text-[15px] text-gray-400 font-semibold">v2.4.1</div>
+        </footer>
+      </div>
     </div>
   );
 }
