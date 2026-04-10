@@ -15,6 +15,10 @@ export default defineConfig(({ mode }) => {
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/api/, ''),
           },
+          '/humanizer': {
+            target: 'http://localhost:8000',
+            changeOrigin: true,
+          },
         },
       },
       plugins: [react()],

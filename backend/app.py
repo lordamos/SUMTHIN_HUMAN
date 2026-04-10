@@ -1,11 +1,11 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import requests
 import os
 import random
 import re
 
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='/humanizer/static')
 CORS(app)
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
@@ -67,6 +67,10 @@ def humanize():
         return jsonify({"humanized_text": None, "fallback": True}), 200
 
     return jsonify({"humanized_text": result, "fallback": False})
+
+@app.route("/humanizer")
+def humanizer_page():
+    return render_template("index.html")
 
 @app.route("/health", methods=["GET"])
 def health():

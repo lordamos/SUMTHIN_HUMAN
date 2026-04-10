@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Humanizer</title>
+  <link rel="stylesheet" href="/humanizer/static/style.css">
+</head>
+<body>
+
+<div class="container">
+  <h1>Humanizer</h1>
+
+  <select id="mode">
+    <option value="casual">Casual</option>
+    <option value="professional">Professional</option>
+    <option value="bypass">Undetectable</option>
+    <option value="shorten">Shorten</option>
+    <option value="expand">Expand</option>
+  </select>
+
+  <div class="panels">
+    <textarea id="inputText" placeholder="Paste text..."></textarea>
+    <textarea id="outputText" placeholder="Result..." readonly></textarea>
+  </div>
+
+  <button onclick="humanize()">Humanize</button>
+
+  <div id="status">Ready</div>
+</div>
+
+<script src="/humanizer/static/app.js"></script>
+</body>
+</html>
