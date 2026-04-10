@@ -20,13 +20,12 @@ export function WorkspaceSplit() {
     <div className="min-h-[100dvh] bg-[#06060c] text-slate-300 p-4 md:p-6 flex flex-col font-sans overflow-hidden">
       {/* Compact Header */}
       <header className="flex items-center justify-between pb-3 border-b border-white/5 shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center">
-            <Sparkles className="w-3 h-3 text-white" />
-          </div>
-          <span className="font-bold text-transparent bg-clip-text bg-gradient-to-r from-pink-400 to-purple-400">
-            HayL3ditor
-          </span>
+        <div className="flex items-center">
+          <img
+            src="/__mockup/images/logo3.png"
+            alt="HayL3ditor"
+            style={{ height: '32px', filter: 'brightness(1.15) drop-shadow(0 0 8px rgba(236,72,153,0.45))' }}
+          />
         </div>
         
         <div className="hidden md:block text-[10px] font-mono tracking-widest text-pink-500/80 px-3 py-1 rounded-full border border-pink-500/20 bg-pink-500/5">

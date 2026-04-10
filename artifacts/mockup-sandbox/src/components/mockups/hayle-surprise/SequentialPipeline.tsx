@@ -19,16 +19,12 @@ export function SequentialPipeline() {
     <div className="min-h-screen bg-[#06060c] text-slate-300 font-sans selection:bg-pink-500/30 overflow-x-hidden pb-24">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4 border-b border-white/5 bg-[#0a0a10]">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-[0_0_10px_rgba(236,72,153,0.3)]">
-            <Activity className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-400 to-purple-400 tracking-tight leading-none">
-              HayL3ditor
-            </h1>
-            <p className="text-[10px] text-slate-500 font-mono tracking-widest mt-0.5">HAYLE EDITOR</p>
-          </div>
+        <div className="flex items-center">
+          <img
+            src="/__mockup/images/logo3.png"
+            alt="HayL3ditor"
+            style={{ height: '36px', filter: 'brightness(1.15) drop-shadow(0 0 8px rgba(236,72,153,0.45))' }}
+          />
         </div>
 
         <div className="absolute left-1/2 -translate-x-1/2">

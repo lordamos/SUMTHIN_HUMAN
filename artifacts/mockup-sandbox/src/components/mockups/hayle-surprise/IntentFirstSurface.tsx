@@ -8,14 +8,12 @@ export function IntentFirstSurface() {
     <div className="min-h-screen bg-[#06060c] text-slate-300 font-sans p-6 flex flex-col items-center">
       {/* Header */}
       <header className="w-full max-w-5xl flex items-center justify-between mb-8 pb-4 border-b border-white/5">
-        <div className="flex items-center gap-4">
-          <div className="text-2xl font-black tracking-tighter bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 bg-clip-text text-transparent">
-            HayL3ditor
-          </div>
-          <div className="h-4 w-px bg-white/20"></div>
-          <div className="text-xs font-bold tracking-widest text-slate-500 uppercase">
-            Hayle Editor
-          </div>
+        <div className="flex items-center gap-2">
+          <img
+            src="/__mockup/images/logo3.png"
+            alt="HayL3ditor"
+            style={{ height: '36px', filter: 'brightness(1.15) drop-shadow(0 0 8px rgba(236,72,153,0.45))' }}
+          />
         </div>
         <div className="text-xs font-bold tracking-[0.2em] text-pink-500 uppercase">
           AI Forensics
