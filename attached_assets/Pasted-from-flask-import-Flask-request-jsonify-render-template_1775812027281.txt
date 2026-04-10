@@ -1,0 +1,93 @@
+from flask import Flask, request, jsonify, render_template
+from flask_cors import CORS
+import requests
+import os
+import random
+import re
+
+app = Flask(__name__)
+CORS(app)
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
+# ===== HUMAN CHAOS =====
+def add_human_touch(text):
+    if random.random() < 0.3:
+        text = text.replace(". ", "... ", 1)
+    if random.random() < 0.2:
+        text = text.replace(" ", " — ", 1)
+    return text
+
+# ===== FALLBACK =====
+def fallback(text):
+    text = re.sub(r"\bvery\b", "really", text, flags=re.IGNORECASE)
+    text = re.sub(r"\bimportant\b", "pretty important", text, flags=re.IGNORECASE)
+    return text
+
+# ===== AI =====
+def ai_humanize(text, mode):
+    prompt_modes = {
+        "casual": "Rewrite casually like a real person.",
+        "professional": "Rewrite clearly and professionally.",
+        "bypass": "Rewrite to avoid AI detection with high variation.",
+        "shorten": "Rewrite shorter while keeping meaning.",
+        "expand": "Rewrite with more detail."
+    }
+
+    prompt = f"""
+Rewrite this text to sound human.
+
+STYLE: {mode}
+
+Rules:
+- Mix sentence lengths
+- Avoid predictable phrasing
+- Add slight imperfections
+- Keep meaning but rewrite deeply
+
+Text:
+{text}
+"""
+
+    if OPENROUTER_API_KEY:
+        try:
+            res = requests.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "openai/gpt-4o-mini",
+                    "messages": [
+                        {"role": "system", "content": prompt_modes.get(mode, "")},
+                        {"role": "user", "content": text}
+                    ]
+                }
+            )
+
+            result = res.json()["choices"][0]["message"]["content"]
+            return add_human_touch(result)
+
+        except:
+            return fallback(text)
+
+    return fallback(text)
+
+# ===== ROUTES =====
+@app.route("/")
+def home():
+    return render_template("index.html")
+
+@app.route("/humanize", methods=["POST"])
+def humanize():
+    data = request.json
+    text = data.get("text", "")
+    mode = data.get("mode", "casual")
+
+    result = ai_humanize(text, mode)
+
+    return jsonify({"humanized_text": result})
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, threaded=True)

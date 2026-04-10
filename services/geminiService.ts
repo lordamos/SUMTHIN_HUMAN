@@ -115,7 +115,37 @@ export async function analyzeText(text: string): Promise<TextAnalysisResult> {
     });
 }
 
+function mapToneToMode(tone?: string): string {
+    if (!tone) return 'casual';
+    const t = tone.toLowerCase();
+    if (t.includes('professional') || t.includes('formal')) return 'professional';
+    if (t.includes('bypass') || t.includes('stealth')) return 'bypass';
+    if (t.includes('short') || t.includes('concise')) return 'shorten';
+    if (t.includes('expand') || t.includes('detail')) return 'expand';
+    return 'casual';
+}
+
+async function tryFlaskHumanize(text: string, mode: string): Promise<string | null> {
+    try {
+        const res = await fetch('/api/humanize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text, mode }),
+        });
+        if (!res.ok) return null;
+        const data = await res.json();
+        if (data.fallback || !data.humanized_text) return null;
+        return data.humanized_text as string;
+    } catch {
+        return null;
+    }
+}
+
 export async function humanizeText(text: string, styleProfile: WritingStyleProfile | null): Promise<string> {
+    const mode = mapToneToMode(styleProfile?.tone);
+    const flaskResult = await tryFlaskHumanize(text, mode);
+    if (flaskResult) return flaskResult;
+
     let styleInstruction = `
         Focus on natural flow. Vary sentence lengths. Break up repetitive structures. 
         Inject subtle "human" imperfections like rhetorical questions or unique metaphors.
