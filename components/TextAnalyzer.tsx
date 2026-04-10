@@ -515,6 +515,42 @@ const TextAnalyzer: React.FC = () => {
 
             <AnimatePresence>{error && <ErrorDisplay message={error} onDismiss={() => setError(null)} />}</AnimatePresence>
 
+            {/* Empty state hero — shown when no results exist yet */}
+            <AnimatePresence>
+                {!correctedText && !rephrasedGptResults && (!results || results.length === 0) && !error && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.96 }}
+                        transition={{ duration: 0.5 }}
+                        className="flex flex-col items-center justify-center py-10 gap-5 select-none pointer-events-none"
+                    >
+                        <motion.img
+                            src="/logo.png"
+                            alt="HayL3ditor"
+                            className="w-56 sm:w-72 object-contain"
+                            style={{ filter: 'drop-shadow(0 0 20px rgba(34,197,94,0.35))' }}
+                            animate={{
+                                filter: [
+                                    'drop-shadow(0 0 14px rgba(34,197,94,0.25))',
+                                    'drop-shadow(0 0 28px rgba(34,197,94,0.55)) drop-shadow(0 0 50px rgba(6,182,212,0.2))',
+                                    'drop-shadow(0 0 14px rgba(34,197,94,0.25))',
+                                ],
+                                opacity: [0.75, 1, 0.75],
+                            }}
+                            transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                        />
+                        <div className="flex flex-col items-center gap-1.5">
+                            <p className="text-[11px] font-black tracking-[0.35em] uppercase"
+                                style={{ background: 'linear-gradient(90deg, #22c55e, #06b6d4, #f97316)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                                AI Forensics Platform
+                            </p>
+                            <p className="text-[10px] text-gray-600 tracking-widest">Paste text above and run an analysis to begin</p>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {correctedText && (
                 <div className="space-y-4">
                     <div className="flex justify-between items-center">
