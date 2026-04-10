@@ -283,6 +283,61 @@ def precision_edit():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/face-swap", methods=["POST"])
+def face_swap_route():
+    """Single face swap: source face → target image."""
+    try:
+        from ai_edit_engine import face_swap_single, base64_to_image, image_to_base64
+        data = request.json or {}
+        if not data.get("source") or not data.get("target"):
+            return jsonify({"error": "Missing source or target image."}), 400
+
+        source = base64_to_image(data["source"])
+        target = base64_to_image(data["target"])
+        result = face_swap_single(source, target)
+        return jsonify({"image": image_to_base64(result)})
+    except RuntimeError as e:
+        return jsonify({"error": str(e), "fallback": True}), 422
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/face-swap-multi", methods=["POST"])
+def face_swap_multi_route():
+    """Multi face swap: swap all faces in target using source faces."""
+    try:
+        from ai_edit_engine import face_swap_multi, base64_to_image, image_to_base64
+        data = request.json or {}
+        if not data.get("source") or not data.get("target"):
+            return jsonify({"error": "Missing source or target image."}), 400
+
+        source = base64_to_image(data["source"])
+        target = base64_to_image(data["target"])
+        result = face_swap_multi(source, target)
+        return jsonify({"image": image_to_base64(result)})
+    except RuntimeError as e:
+        return jsonify({"error": str(e), "fallback": True}), 422
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/outfit-swap", methods=["POST"])
+def outfit_swap_route():
+    """Outfit swap: blend texture onto body region of image."""
+    try:
+        from ai_edit_engine import outfit_swap, base64_to_image, image_to_base64
+        data = request.json or {}
+        if not data.get("image") or not data.get("texture"):
+            return jsonify({"error": "Missing image or texture."}), 400
+
+        image = base64_to_image(data["image"])
+        texture = base64_to_image(data["texture"])
+        result = outfit_swap(image, texture)
+        return jsonify({"image": image_to_base64(result)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/humanizer")
 def humanizer_page():
     return render_template("index.html")

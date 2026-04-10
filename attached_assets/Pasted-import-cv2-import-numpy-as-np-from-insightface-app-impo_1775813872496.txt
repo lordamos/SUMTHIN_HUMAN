@@ -1,0 +1,83 @@
+import cv2
+import numpy as np
+from insightface.app import FaceAnalysis
+from insightface.model_zoo import get_model
+import mediapipe as mp
+
+# ===== INIT MODELS =====
+face_app = FaceAnalysis()
+face_app.prepare(ctx_id=0)
+
+swapper = get_model('inswapper_128.onnx')
+
+mp_selfie = mp.solutions.selfie_segmentation
+
+# ===== FACE SWAP (SINGLE) =====
+def face_swap_single(source_img, target_img):
+    faces_target = face_app.get(target_img)
+    faces_source = face_app.get(source_img)
+
+    if not faces_target or not faces_source:
+        return target_img
+
+    result = swapper.get(target_img, faces_target[0], faces_source[0], paste_back=True)
+    return result
+
+
+# ===== MULTI FACE SWAP =====
+def face_swap_multi(source_img, target_img):
+    faces_target = face_app.get(target_img)
+    faces_source = face_app.get(source_img)
+
+    if not faces_target or not faces_source:
+        return target_img
+
+    result = target_img.copy()
+
+    for i, face in enumerate(faces_target):
+        src_face = faces_source[i % len(faces_source)]
+        result = swapper.get(result, face, src_face, paste_back=True)
+
+    return result
+
+
+# ===== OUTFIT SWAP (BODY SEGMENTATION) =====
+def get_body_mask(image):
+    with mp_selfie.SelfieSegmentation(model_selection=1) as segmenter:
+        results = segmenter.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        mask = results.segmentation_mask > 0.5
+        return mask.astype(np.uint8) * 255
+
+
+def outfit_swap(image, new_texture):
+    mask = get_body_mask(image)
+
+    texture = cv2.resize(new_texture, (image.shape[1], image.shape[0]))
+
+    # blend texture into body area
+    result = image.copy()
+    result[mask == 255] = texture[mask == 255]
+
+    return result
+
+
+# ===== IMAGE UTILS =====
+def base64_to_image(base64_str):
+    import base64
+    from io import BytesIO
+    from PIL import Image
+
+    img_data = base64.b64decode(base64_str)
+    img = Image.open(BytesIO(img_data))
+    return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+
+
+def image_to_base64(image):
+    import base64
+    from PIL import Image
+    from io import BytesIO
+
+    img = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    return base64.b64encode(buffer.getvalue()).decode()

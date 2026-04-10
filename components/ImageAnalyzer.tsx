@@ -15,7 +15,7 @@ import {
     UpscaleIcon, SaveIcon, DiskIcon, PaletteIcon, CloudIcon, GoogleDriveIcon, DropboxIcon
 } from './Icons';
 
-type LoadingAction = 'analyze' | 'describe' | 'tag' | 'color' | 'smart' | 'edit-bg' | 'edit-watermark' | 'edit-upscale' | 'cloud' | 'prompt' | 'style' | 'make-human' | null;
+type LoadingAction = 'analyze' | 'describe' | 'tag' | 'color' | 'smart' | 'edit-bg' | 'edit-watermark' | 'edit-upscale' | 'cloud' | 'prompt' | 'style' | 'make-human' | 'face-swap' | 'face-swap-multi' | 'outfit-swap' | null;
 
 interface BatchItem {
     id: string;
@@ -287,11 +287,43 @@ interface BatchItemCardProps {
     onGeneratePrompt: (id: string) => void;
     onClassifyStyle: (id: string) => void;
     onMakeHuman: (id: string) => void;
+    onFaceSwap: (id: string, sourceB64: string, mode: 'single' | 'multi') => void;
+    onOutfitSwap: (id: string, textureB64: string) => void;
 }
 
-const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert, onProcess, onUpdate, onDownload, onEdit, isExporting, onSaveToCloud, onSmartAnalysis, onGeneratePrompt, onClassifyStyle, onMakeHuman }) => {
+const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert, onProcess, onUpdate, onDownload, onEdit, isExporting, onSaveToCloud, onSmartAnalysis, onGeneratePrompt, onClassifyStyle, onMakeHuman, onFaceSwap, onOutfitSwap }) => {
     const isLoading = !!item.loadingAction;
     const [isHumanizingDesc, setIsHumanizingDesc] = useState(false);
+    const [swapMode, setSwapMode] = useState<'single' | 'multi'>('single');
+    const faceSwapInputRef = useRef<HTMLInputElement>(null);
+    const outfitSwapInputRef = useRef<HTMLInputElement>(null);
+
+    const readFileAsBase64 = (file: File): Promise<string> =>
+        new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+                const result = reader.result as string;
+                resolve(result.split(',')[1]);
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+
+    const handleFaceSwapFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const b64 = await readFileAsBase64(file);
+        onFaceSwap(item.id, b64, swapMode);
+        e.target.value = '';
+    };
+
+    const handleOutfitSwapFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const b64 = await readFileAsBase64(file);
+        onOutfitSwap(item.id, b64);
+        e.target.value = '';
+    };
 
     const handleCopyDescription = () => {
         if (!item.description) return;
@@ -504,6 +536,39 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert,
                             <button onClick={() => onMakeHuman(item.id)} disabled={isLoading} className="w-full px-2 py-2 rounded-xl text-xs font-black border border-rose-500/30 transition-all flex items-center justify-center gap-1.5" style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.15), rgba(249,115,22,0.1))' }}>
                                 {item.loadingAction === 'make-human' ? <><Spinner /> {item.precisionMode ? 'Precision Humanizing...' : 'Humanizing...'}</> : `🧠 Make More Human${item.precisionMode ? ' 🎯' : ''}`}
                             </button>
+                        </div>
+                    </div>
+
+                    {/* ── SECTION: Swap Engine ── */}
+                    <div className="rounded-2xl overflow-hidden border border-white/[0.06]" style={{ background: 'rgba(16,185,129,0.04)' }}>
+                        <div className="px-3 py-1.5 flex items-center justify-between" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-500/70">🔄 Swap Engine</span>
+                            <div className="flex items-center gap-1">
+                                <button onClick={() => setSwapMode('single')} className={`text-[9px] font-bold px-2 py-0.5 rounded-full transition-all ${swapMode === 'single' ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/40' : 'text-gray-500 hover:text-emerald-400'}`}>1 Face</button>
+                                <button onClick={() => setSwapMode('multi')} className={`text-[9px] font-bold px-2 py-0.5 rounded-full transition-all ${swapMode === 'multi' ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500/40' : 'text-gray-500 hover:text-emerald-400'}`}>All Faces</button>
+                            </div>
+                        </div>
+                        <div className="p-2 flex flex-col gap-1.5">
+                            <p className="text-[9px] text-gray-600 px-1">Select a source image to swap from</p>
+                            <button
+                                onClick={() => faceSwapInputRef.current?.click()}
+                                disabled={isLoading}
+                                className="w-full px-2 py-2 rounded-xl text-xs font-black border border-emerald-500/30 transition-all flex items-center justify-center gap-1.5"
+                                style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.15), rgba(6,182,212,0.1))' }}
+                            >
+                                {item.loadingAction === 'face-swap' || item.loadingAction === 'face-swap-multi'
+                                    ? <><Spinner /> Swapping Faces...</>
+                                    : `👤 Face Swap (${swapMode === 'single' ? 'Single' : 'All Faces'})`}
+                            </button>
+                            <button
+                                onClick={() => outfitSwapInputRef.current?.click()}
+                                disabled={isLoading}
+                                className="w-full px-2 py-2 rounded-xl text-xs font-bold border border-cyan-500/20 bg-white/[0.04] text-gray-400 hover:bg-cyan-500/10 hover:text-cyan-300 hover:border-cyan-500/30 transition-all flex items-center justify-center gap-1.5"
+                            >
+                                {item.loadingAction === 'outfit-swap' ? <><Spinner /> Swapping Outfit...</> : '👕 Outfit Swap (select texture)'}
+                            </button>
+                            <input ref={faceSwapInputRef} type="file" className="hidden" accept="image/png,image/jpeg,image/webp" onChange={handleFaceSwapFileSelect} />
+                            <input ref={outfitSwapInputRef} type="file" className="hidden" accept="image/png,image/jpeg,image/webp" onChange={handleOutfitSwapFileSelect} />
                         </div>
                     </div>
 
@@ -1063,6 +1128,60 @@ const ImageAnalyzer: React.FC = () => {
         }
     };
 
+    const handleFaceSwap = async (id: string, sourceB64: string, mode: 'single' | 'multi') => {
+        const item = items.find(i => i.id === id);
+        if (!item) return;
+        const action: LoadingAction = mode === 'single' ? 'face-swap' : 'face-swap-multi';
+        setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: action, error: null } : i));
+        try {
+            const targetB64 = await getBase64FromItem(item);
+            const endpoint = mode === 'single' ? '/face-swap' : '/face-swap-multi';
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source: sourceB64, target: targetB64 }),
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) throw new Error(data.error || 'Face swap failed.');
+            setItems(prev => prev.map(i => i.id === id ? {
+                ...i,
+                loadingAction: null,
+                preview: `data:image/png;base64,${data.image}`,
+                isEdited: true,
+                error: null,
+            } : i));
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Face swap failed.';
+            setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, error: msg } : i));
+        }
+    };
+
+    const handleOutfitSwap = async (id: string, textureB64: string) => {
+        const item = items.find(i => i.id === id);
+        if (!item) return;
+        setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: 'outfit-swap', error: null } : i));
+        try {
+            const imageB64 = await getBase64FromItem(item);
+            const res = await fetch('/outfit-swap', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image: imageB64, texture: textureB64 }),
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) throw new Error(data.error || 'Outfit swap failed.');
+            setItems(prev => prev.map(i => i.id === id ? {
+                ...i,
+                loadingAction: null,
+                preview: `data:image/png;base64,${data.image}`,
+                isEdited: true,
+                error: null,
+            } : i));
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Outfit swap failed.';
+            setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, error: msg } : i));
+        }
+    };
+
     const processBatchEdit = async (editType: 'bg' | 'watermark' | 'upscale') => {
         let prompt = "";
         let actionType: LoadingAction = null;
@@ -1358,6 +1477,8 @@ const ImageAnalyzer: React.FC = () => {
                             onGeneratePrompt={handleGeneratePrompt}
                             onClassifyStyle={handleClassifyStyle}
                             onMakeHuman={handleMakeHuman}
+                            onFaceSwap={handleFaceSwap}
+                            onOutfitSwap={handleOutfitSwap}
                         />
                     ))}
                 </AnimatePresence>
