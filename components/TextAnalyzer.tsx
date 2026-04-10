@@ -122,7 +122,18 @@ const RephrasedGptResultsView: React.FC<{ results: string[]; onTTS: (text: strin
     );
 };
 
-const CorrectedTextView: React.FC<{ text: string; onTTS: (text: string, id: string) => void; currentAudio: string | null }> = ({ text, onTTS, currentAudio }) => (
+function buildDiffHtml(original: string, modified: string): string {
+    const origSet = new Set(original.split(/\s+/));
+    return modified.split(' ').map(word => {
+        const clean = word.replace(/[^a-zA-Z0-9]/g, '');
+        if (clean && !origSet.has(word) && !origSet.has(clean)) {
+            return `<mark style="background:#0ea5e933;color:#7dd3fc;padding:1px 3px;border-radius:4px;border:1px solid #0ea5e955">${word}</mark>`;
+        }
+        return word;
+    }).join(' ');
+}
+
+const CorrectedTextView: React.FC<{ text: string; originalText?: string; onTTS: (text: string, id: string) => void; currentAudio: string | null }> = ({ text, originalText, onTTS, currentAudio }) => (
     <motion.div 
         initial={{ opacity: 0, y: 10 }} 
         animate={{ opacity: 1, y: 0 }}
@@ -131,9 +142,16 @@ const CorrectedTextView: React.FC<{ text: string; onTTS: (text: string, id: stri
         <div className="absolute top-4 right-4">
             <TTSButton text={text} id="humanized-main" currentPlaying={currentAudio} onPlay={onTTS} className="opacity-0 group-hover:opacity-100" />
         </div>
-        <pre className="text-gray-200 whitespace-pre-wrap font-sans text-base leading-relaxed pr-12">
-            {text}
-        </pre>
+        {originalText ? (
+            <p
+                className="text-gray-200 whitespace-pre-wrap font-sans text-base leading-relaxed pr-12"
+                dangerouslySetInnerHTML={{ __html: buildDiffHtml(originalText, text) }}
+            />
+        ) : (
+            <pre className="text-gray-200 whitespace-pre-wrap font-sans text-base leading-relaxed pr-12">
+                {text}
+            </pre>
+        )}
     </motion.div>
 );
 
@@ -235,6 +253,10 @@ const TextAnalyzer: React.FC = () => {
     const audioContextRef = useRef<AudioContext | null>(null);
     const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
+    const [humanizeMode, setHumanizeMode] = useState<string>('casual');
+    const [isRealtimeHumanizing, setIsRealtimeHumanizing] = useState(false);
+    const lastHumanizedTextRef = useRef<string>('');
+
     const [wordCount, setWordCount] = useState(0);
     const [charCount, setCharCount] = useState(0);
     const CHAR_LIMIT = 20000;
@@ -257,6 +279,34 @@ const TextAnalyzer: React.FC = () => {
         setWordCount(text.trim() === '' ? 0 : words.length);
         setCharCount(text.length);
     }, [text]);
+
+    useEffect(() => {
+        if (!text.trim()) return;
+        const timeout = setTimeout(async () => {
+            setIsRealtimeHumanizing(true);
+            try {
+                let result: string | null = null;
+                try {
+                    const res = await fetch('/humanize', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text, mode: humanizeMode }),
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (!data.fallback && data.humanized_text) result = data.humanized_text;
+                    }
+                } catch {}
+                if (!result) result = await humanizeText(text, writingStyle);
+                lastHumanizedTextRef.current = text;
+                setCorrectedText(result);
+                setRephrasedGptResults(null);
+                navigator.clipboard.writeText(result).catch(() => {});
+            } catch {}
+            finally { setIsRealtimeHumanizing(false); }
+        }, 700);
+        return () => clearTimeout(timeout);
+    }, [text, humanizeMode]);
 
     useEffect(() => {
         try {
@@ -426,9 +476,22 @@ const TextAnalyzer: React.FC = () => {
                 <button onClick={handleAnalyze} disabled={isLoading || !text.trim()} className="px-6 py-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:scale-105 transition-all font-semibold min-w-[200px] flex items-center justify-center">
                     {loadingAction === 'analyze' ? <><Spinner /> Analyzing...</> : 'Analyze Text'}
                 </button>
-                <button onClick={handleHumanize} disabled={isLoading || !text.trim()} className="px-6 py-3 rounded-2xl bg-gradient-to-br from-teal-400/30 to-amber-400/20 border border-white/10 hover:scale-105 transition-all font-semibold min-w-[200px] flex items-center justify-center gap-2">
-                    {loadingAction === 'humanize' ? <><Spinner /> Humanizing...</> : <><HumanizerIcon /> <span>Humanize</span></>}
-                </button>
+                <div className="flex items-center gap-2 flex-wrap justify-center">
+                    <button onClick={handleHumanize} disabled={isLoading || !text.trim()} className="px-6 py-3 rounded-2xl bg-gradient-to-br from-teal-400/30 to-amber-400/20 border border-white/10 hover:scale-105 transition-all font-semibold min-w-[160px] flex items-center justify-center gap-2">
+                        {loadingAction === 'humanize' || isRealtimeHumanizing ? <><Spinner /> {isRealtimeHumanizing ? 'Rewriting...' : 'Humanizing...'}</> : <><HumanizerIcon /> <span>Humanize</span></>}
+                    </button>
+                    <select
+                        value={humanizeMode}
+                        onChange={(e) => setHumanizeMode(e.target.value)}
+                        className="bg-white/5 border border-white/10 rounded-xl px-3 py-3 text-sm text-gray-200 cursor-pointer outline-none hover:border-teal-400/40 transition-colors"
+                    >
+                        <option value="casual">Casual</option>
+                        <option value="professional">Professional</option>
+                        <option value="bypass">Undetectable</option>
+                        <option value="shorten">Shorten</option>
+                        <option value="expand">Expand</option>
+                    </select>
+                </div>
                 <button onClick={() => setIsStyleSetupOpen(true)} className="px-6 py-3 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all font-semibold min-w-[200px] flex items-center justify-center gap-2"><PersonalizeIcon /> <span>{writingStyle ? "Edit Style" : "Train AI Style"}</span></button>
                 <div ref={improvementRef} className="relative inline-flex rounded-2xl shadow-sm">
                     <button onClick={() => handleImprovement(improvementStyle)} disabled={isLoading || !text.trim()} className="px-6 py-3 rounded-l-2xl bg-white/5 border border-r-0 border-white/10 hover:bg-white/10 font-semibold min-w-[200px] flex items-center justify-center gap-2">
@@ -463,7 +526,7 @@ const TextAnalyzer: React.FC = () => {
                              </button>
                         </div>
                     </div>
-                    <CorrectedTextView text={correctedText} onTTS={handleUniversalTTS} currentAudio={currentAudioId} />
+                    <CorrectedTextView text={correctedText} originalText={lastHumanizedTextRef.current || text} onTTS={handleUniversalTTS} currentAudio={currentAudioId} />
                 </div>
             )}
 
