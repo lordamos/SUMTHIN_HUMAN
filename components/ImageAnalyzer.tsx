@@ -1595,6 +1595,41 @@ const ImageAnalyzer: React.FC = () => {
                 )}
             </AnimatePresence>
             
+            {/* Logo hero — shown when no images loaded */}
+            <AnimatePresence>
+                {items.length === 0 && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        transition={{ duration: 0.45 }}
+                        className="flex flex-col items-center justify-center py-6 gap-4 select-none pointer-events-none"
+                    >
+                        <motion.img
+                            src="/logo.png"
+                            alt="HayL3ditor"
+                            className="w-48 sm:w-64 object-contain"
+                            animate={{
+                                filter: [
+                                    'drop-shadow(0 0 12px rgba(34,197,94,0.22))',
+                                    'drop-shadow(0 0 26px rgba(34,197,94,0.52)) drop-shadow(0 0 45px rgba(6,182,212,0.18))',
+                                    'drop-shadow(0 0 12px rgba(34,197,94,0.22))',
+                                ],
+                                opacity: [0.72, 1, 0.72],
+                            }}
+                            transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                        />
+                        <div className="flex flex-col items-center gap-1">
+                            <p className="text-[11px] font-black tracking-[0.35em] uppercase"
+                                style={{ background: 'linear-gradient(90deg, #22c55e, #06b6d4, #f97316)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                                AI Image Engine
+                            </p>
+                            <p className="text-[10px] text-gray-600 tracking-widest">Upload images to activate the swap &amp; forensics engine</p>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             <div className="flex flex-col sm:flex-row gap-4">
                 <div
                     onDragEnter={handleDrag}
