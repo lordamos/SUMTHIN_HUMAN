@@ -1611,9 +1611,9 @@ const ImageAnalyzer: React.FC = () => {
                             className="w-48 sm:w-64 object-contain"
                             animate={{
                                 filter: [
-                                    'drop-shadow(0 0 12px rgba(236,72,153,0.22))',
-                                    'drop-shadow(0 0 26px rgba(168,85,247,0.52)) drop-shadow(0 0 45px rgba(129,140,248,0.18))',
-                                    'drop-shadow(0 0 12px rgba(236,72,153,0.22))',
+                                    'brightness(1.15) drop-shadow(0 0 6px rgba(255,255,255,0.2)) drop-shadow(0 0 14px rgba(236,72,153,0.4))',
+                                    'brightness(1.25) drop-shadow(0 0 8px rgba(255,255,255,0.35)) drop-shadow(0 0 28px rgba(168,85,247,0.6)) drop-shadow(0 0 48px rgba(129,140,248,0.2))',
+                                    'brightness(1.15) drop-shadow(0 0 6px rgba(255,255,255,0.2)) drop-shadow(0 0 14px rgba(236,72,153,0.4))',
                                 ],
                                 opacity: [0.72, 1, 0.72],
                             }}

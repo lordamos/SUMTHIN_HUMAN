@@ -529,12 +529,12 @@ const TextAnalyzer: React.FC = () => {
                             src="/logo3.png"
                             alt="HayL3ditor"
                             className="w-56 sm:w-72 object-contain"
-                            style={{ filter: 'drop-shadow(0 0 20px rgba(168,85,247,0.35))' }}
+                            style={{ filter: 'brightness(1.2) drop-shadow(0 0 20px rgba(168,85,247,0.4))' }}
                             animate={{
                                 filter: [
-                                    'drop-shadow(0 0 14px rgba(236,72,153,0.25))',
-                                    'drop-shadow(0 0 28px rgba(168,85,247,0.55)) drop-shadow(0 0 50px rgba(129,140,248,0.2))',
-                                    'drop-shadow(0 0 14px rgba(236,72,153,0.25))',
+                                    'brightness(1.15) drop-shadow(0 0 6px rgba(255,255,255,0.2)) drop-shadow(0 0 18px rgba(236,72,153,0.4))',
+                                    'brightness(1.25) drop-shadow(0 0 8px rgba(255,255,255,0.35)) drop-shadow(0 0 32px rgba(168,85,247,0.65)) drop-shadow(0 0 55px rgba(129,140,248,0.25))',
+                                    'brightness(1.15) drop-shadow(0 0 6px rgba(255,255,255,0.2)) drop-shadow(0 0 18px rgba(236,72,153,0.4))',
                                 ],
                                 opacity: [0.75, 1, 0.75],
                             }}

@@ -82,7 +82,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col text-gray-100 font-sans overflow-x-hidden"
-      style={{ background: '#07030e' }}>
+      style={{ background: '#06060c' }}>
 
       {/* ── Background layer ────────────────────────────────────── */}
       <div className="fixed inset-0 -z-10 pointer-events-none overflow-hidden">
@@ -91,10 +91,10 @@ const App: React.FC = () => {
           style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\'/%3E%3C/svg%3E")', backgroundSize: '256px' }} />
 
         {/* Ambient orbs */}
-        <Orb x="5%" y="10%" size="600px" color="radial-gradient(circle, rgba(236,72,153,0.18), transparent)" delay={0} />
-        <Orb x="65%" y="0%" size="700px" color="radial-gradient(circle, rgba(168,85,247,0.13), transparent)" delay={2} />
-        <Orb x="40%" y="55%" size="800px" color="radial-gradient(circle, rgba(129,140,248,0.08), transparent)" delay={4} />
-        <Orb x="-5%" y="60%" size="450px" color="radial-gradient(circle, rgba(236,72,153,0.07), transparent)" delay={1} />
+        <Orb x="5%" y="10%" size="600px" color="radial-gradient(circle, rgba(236,72,153,0.15), transparent)" delay={0} />
+        <Orb x="65%" y="0%" size="700px" color="radial-gradient(circle, rgba(168,85,247,0.1), transparent)" delay={2} />
+        <Orb x="40%" y="55%" size="800px" color="radial-gradient(circle, rgba(129,140,248,0.06), transparent)" delay={4} />
+        <Orb x="-5%" y="60%" size="450px" color="radial-gradient(circle, rgba(236,72,153,0.06), transparent)" delay={1} />
 
         {/* Animated neon light trails — inspired by logo */}
         <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg"
@@ -158,14 +158,18 @@ const App: React.FC = () => {
         {/* Logo + brand */}
         <div className="flex items-center gap-3 relative z-10">
           <motion.div
-            animate={{ filter: ['drop-shadow(0 0 8px rgba(236,72,153,0.4))', 'drop-shadow(0 0 18px rgba(168,85,247,0.7))', 'drop-shadow(0 0 8px rgba(236,72,153,0.4))'] }}
+            animate={{ filter: [
+              'drop-shadow(0 0 4px rgba(255,255,255,0.3)) drop-shadow(0 0 10px rgba(236,72,153,0.5))',
+              'drop-shadow(0 0 6px rgba(255,255,255,0.5)) drop-shadow(0 0 20px rgba(168,85,247,0.8))',
+              'drop-shadow(0 0 4px rgba(255,255,255,0.3)) drop-shadow(0 0 10px rgba(236,72,153,0.5))',
+            ] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
           >
             <img
               src="/logo3.png"
               alt="HayL3ditor"
               className="h-11 w-auto object-contain"
-              style={{ imageRendering: 'crisp-edges' }}
+              style={{ imageRendering: 'crisp-edges', filter: 'brightness(1.15) contrast(1.05)' }}
             />
           </motion.div>
           <div>
