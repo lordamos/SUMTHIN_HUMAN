@@ -126,6 +126,24 @@ const App: React.FC = () => {
         {/* Bottom vignette */}
         <div className="absolute bottom-0 left-0 right-0 h-64"
           style={{ background: 'linear-gradient(to top, rgba(3,5,7,0.8), transparent)' }} />
+
+        {/* Background logo watermark */}
+        <motion.img
+          src="/logo.png"
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 m-auto w-[520px] max-w-[70vw] object-contain pointer-events-none select-none"
+          style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+          animate={{
+            opacity: [0.07, 0.16, 0.07],
+            filter: [
+              'drop-shadow(0 0 40px rgba(34,197,94,0.0))',
+              'drop-shadow(0 0 90px rgba(34,197,94,0.15))',
+              'drop-shadow(0 0 40px rgba(34,197,94,0.0))',
+            ],
+          }}
+          transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
+        />
       </div>
 
       {/* ── Header ──────────────────────────────────────────────── */}
