@@ -1,8 +1,8 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { analyzeImage, describeImage, generateImageTags, editImage, getDominantColors } from '../services/geminiService';
-import type { ImageAnalysisResult, ImageAnalysisItem, ImageTagsResult, ImageDraftState, DominantColorsResult, CloudFile, CloudProvider } from '../types';
+import { analyzeImage, describeImage, generateImageTags, editImage, getDominantColors, generateImagePrompt, classifyImageStyle } from '../services/geminiService';
+import type { ImageAnalysisResult, ImageAnalysisItem, ImageTagsResult, ImageDraftState, DominantColorsResult, CloudFile, CloudProvider, ImageStyleResult, CategoryScore } from '../types';
 import Gauge from './Gauge';
 import Spinner from './Spinner';
 import ErrorDisplay from './ErrorDisplay';
@@ -15,7 +15,7 @@ import {
     UpscaleIcon, SaveIcon, DiskIcon, PaletteIcon, CloudIcon, GoogleDriveIcon, DropboxIcon
 } from './Icons';
 
-type LoadingAction = 'analyze' | 'describe' | 'tag' | 'color' | 'smart' | 'edit-bg' | 'edit-watermark' | 'edit-upscale' | 'cloud' | null;
+type LoadingAction = 'analyze' | 'describe' | 'tag' | 'color' | 'smart' | 'edit-bg' | 'edit-watermark' | 'edit-upscale' | 'cloud' | 'prompt' | 'style' | 'make-human' | null;
 
 interface BatchItem {
     id: string;
@@ -27,6 +27,9 @@ interface BatchItem {
     description: string | null;
     tags: ImageTagsResult | null;
     colorResult: DominantColorsResult | null;
+    promptResult: string | null;
+    styleResult: ImageStyleResult | null;
+    isPromptCopied: boolean;
     error: string | null;
     selectedFilter: string;
     isDescriptionCopied: boolean;
@@ -280,9 +283,12 @@ interface BatchItemCardProps {
     isExporting: string | null;
     onSaveToCloud: (id: string, provider: CloudProvider) => void;
     onSmartAnalysis: (id: string) => void;
+    onGeneratePrompt: (id: string) => void;
+    onClassifyStyle: (id: string) => void;
+    onMakeHuman: (id: string) => void;
 }
 
-const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert, onProcess, onUpdate, onDownload, onEdit, isExporting, onSaveToCloud, onSmartAnalysis }) => {
+const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert, onProcess, onUpdate, onDownload, onEdit, isExporting, onSaveToCloud, onSmartAnalysis, onGeneratePrompt, onClassifyStyle, onMakeHuman }) => {
     const isLoading = !!item.loadingAction;
     const [isHumanizingDesc, setIsHumanizingDesc] = useState(false);
 
@@ -490,6 +496,27 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert,
                         >
                             {item.loadingAction === 'smart' ? <><Spinner /> Running Pipeline...</> : '⚡ Smart Analysis'}
                         </button>
+                        <button
+                            onClick={() => onGeneratePrompt(item.id)}
+                            disabled={isLoading}
+                            className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-all flex items-center justify-center gap-1 ${item.promptResult ? 'bg-violet-500/20 text-violet-300 border-violet-500/30' : 'bg-white/5 text-gray-300 border-white/10 hover:bg-violet-500/10 hover:text-violet-300 hover:border-violet-500/30'}`}
+                        >
+                            {item.loadingAction === 'prompt' ? <Spinner /> : '🔮 Gen Prompt'}
+                        </button>
+                        <button
+                            onClick={() => onClassifyStyle(item.id)}
+                            disabled={isLoading}
+                            className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-all flex items-center justify-center gap-1 ${item.styleResult ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' : 'bg-white/5 text-gray-300 border-white/10 hover:bg-sky-500/10 hover:text-sky-300 hover:border-sky-500/30'}`}
+                        >
+                            {item.loadingAction === 'style' ? <Spinner /> : '🧬 Style DNA'}
+                        </button>
+                        <button
+                            onClick={() => onMakeHuman(item.id)}
+                            disabled={isLoading}
+                            className="col-span-2 px-3 py-2 rounded-lg text-xs font-bold border border-rose-500/40 bg-gradient-to-r from-rose-500/20 to-orange-500/10 text-rose-300 hover:from-rose-500/30 hover:to-orange-500/20 transition-all flex items-center justify-center gap-2"
+                        >
+                            {item.loadingAction === 'make-human' ? <><Spinner /> Humanizing Image...</> : '🧠 Make More Human'}
+                        </button>
                         <div className="flex gap-1">
                              <button
                                 onClick={() => onDownload(item)}
@@ -547,6 +574,28 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert,
                                          <p className="text-sm text-gray-400">Likelihood of AI generation.</p>
                                      </div>
                                  </div>
+
+                                 {item.result.categoryScores && item.result.categoryScores.length > 0 && (
+                                     <div className="p-4 rounded-xl bg-black/20 border border-white/5 space-y-3">
+                                         <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold">Forensic Score Breakdown</p>
+                                         {item.result.categoryScores.map((cat, i) => (
+                                             <div key={i} className="space-y-1">
+                                                 <div className="flex justify-between text-xs">
+                                                     <span className="text-gray-300">{cat.name}</span>
+                                                     <span className={`font-bold ${cat.score >= 70 ? 'text-red-400' : cat.score >= 40 ? 'text-amber-400' : 'text-teal-400'}`}>{cat.score}%</span>
+                                                 </div>
+                                                 <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                                                     <motion.div
+                                                         initial={{ width: 0 }}
+                                                         animate={{ width: `${cat.score}%` }}
+                                                         transition={{ duration: 0.8, delay: i * 0.1 }}
+                                                         className={`h-full rounded-full ${cat.score >= 70 ? 'bg-red-500' : cat.score >= 40 ? 'bg-amber-500' : 'bg-teal-500'}`}
+                                                     />
+                                                 </div>
+                                             </div>
+                                         ))}
+                                     </div>
+                                 )}
                                  
                                  <div className="space-y-3">
                                     {item.result.analysis.map((analysisItem, idx) => (
@@ -607,6 +656,60 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert,
                                 exit={{ opacity: 0, x: -20 }}
                             >
                                 <ColorPaletteView result={item.colorResult} />
+                            </motion.div>
+                        )}
+
+                        {item.promptResult && (
+                            <motion.div
+                                key="promptResult"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="space-y-3"
+                            >
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-base font-semibold text-violet-300 flex items-center gap-2">🔮 Reverse-Engineered Prompt</h3>
+                                    <button
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(item.promptResult!).then(() => {
+                                                onUpdate(item.id, { isPromptCopied: true });
+                                                setTimeout(() => onUpdate(item.id, { isPromptCopied: false }), 2000);
+                                            });
+                                        }}
+                                        className="text-xs text-gray-400 hover:text-white flex items-center gap-1"
+                                    >
+                                        {item.isPromptCopied ? <CheckIcon /> : <ClipboardIcon />}
+                                        {item.isPromptCopied ? 'Copied' : 'Copy'}
+                                    </button>
+                                </div>
+                                <div className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/20 text-sm text-gray-200 leading-relaxed italic">
+                                    {item.promptResult}
+                                </div>
+                            </motion.div>
+                        )}
+
+                        {item.styleResult && (
+                            <motion.div
+                                key="styleResult"
+                                initial={{ opacity: 0, x: 20 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -20 }}
+                                className="p-4 rounded-xl bg-sky-500/10 border border-sky-500/20 space-y-3"
+                            >
+                                <p className="text-[10px] uppercase tracking-widest text-sky-400 font-bold">Style DNA</p>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xl font-black text-white">{item.styleResult.style}</span>
+                                    <span className={`text-sm font-bold px-2 py-1 rounded-lg ${item.styleResult.confidence >= 70 ? 'bg-teal-500/20 text-teal-300' : item.styleResult.confidence >= 40 ? 'bg-amber-500/20 text-amber-300' : 'bg-white/10 text-gray-400'}`}>{item.styleResult.confidence}% confident</span>
+                                </div>
+                                <p className="text-sm text-gray-300 leading-relaxed">{item.styleResult.reasoning}</p>
+                                {item.styleResult.alternates && item.styleResult.alternates.length > 0 && (
+                                    <div className="flex gap-2 flex-wrap">
+                                        <span className="text-xs text-gray-500">Also could be:</span>
+                                        {item.styleResult.alternates.map((alt, i) => (
+                                            <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-white/10 text-gray-300 border border-white/10">{alt}</span>
+                                        ))}
+                                    </div>
+                                )}
                             </motion.div>
                         )}
                         
@@ -707,6 +810,9 @@ const ImageAnalyzer: React.FC = () => {
                     description: null,
                     tags: null,
                     colorResult: null,
+                    promptResult: null,
+                    styleResult: null,
+                    isPromptCopied: false,
                     error: null,
                     selectedFilter: 'none',
                     isDescriptionCopied: false,
@@ -718,6 +824,9 @@ const ImageAnalyzer: React.FC = () => {
             });
             setItems(prev => [...prev, ...newItems]);
             setGlobalError(null);
+            setTimeout(() => {
+                newItems.forEach(item => processItem(item.id, 'analyze'));
+            }, 200);
         }
     };
 
@@ -906,6 +1015,52 @@ const ImageAnalyzer: React.FC = () => {
             } : i));
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Smart analysis failed.';
+            setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, error: msg } : i));
+        }
+    };
+
+    const handleGeneratePrompt = async (id: string) => {
+        const item = items.find(i => i.id === id);
+        if (!item) return;
+        setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: 'prompt', error: null } : i));
+        try {
+            const base64Image = await getBase64FromItem(item);
+            const result = await generateImagePrompt(base64Image, item.file.type);
+            setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, promptResult: result } : i));
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to generate prompt.';
+            setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, error: msg } : i));
+        }
+    };
+
+    const handleClassifyStyle = async (id: string) => {
+        const item = items.find(i => i.id === id);
+        if (!item) return;
+        setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: 'style', error: null } : i));
+        try {
+            const base64Image = await getBase64FromItem(item);
+            const result = await classifyImageStyle(base64Image, item.file.type);
+            setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, styleResult: result } : i));
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to classify style.';
+            setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, error: msg } : i));
+        }
+    };
+
+    const handleMakeHuman = async (id: string) => {
+        const item = items.find(i => i.id === id);
+        if (!item) return;
+        setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: 'make-human', error: null } : i));
+        try {
+            const base64Image = await getBase64FromItem(item);
+            const edited = await editImage(
+                base64Image,
+                item.file.type,
+                "Make this image look more natural and less AI-generated. Add subtle imperfections, organic texture variation, realistic noise and grain, natural lighting irregularities, and slight asymmetry that real cameras and real scenes would produce. The result should pass as a real photograph."
+            );
+            setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, preview: `data:${item.file.type};base64,${edited}`, isEdited: true } : i));
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : 'Failed to humanize image.';
             setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, error: msg } : i));
         }
     };
@@ -1199,6 +1354,9 @@ const ImageAnalyzer: React.FC = () => {
                             isExporting={isExporting}
                             onSaveToCloud={handleSaveToCloud}
                             onSmartAnalysis={processSmartAnalysis}
+                            onGeneratePrompt={handleGeneratePrompt}
+                            onClassifyStyle={handleClassifyStyle}
+                            onMakeHuman={handleMakeHuman}
                         />
                     ))}
                 </AnimatePresence>

@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type, Modality } from "@google/genai";
-import type { TextAnalysisResult, ImageAnalysisResult, ImageTagsResult, WritingStyleProfile, DominantColorsResult } from '../types';
+import type { TextAnalysisResult, ImageAnalysisResult, ImageTagsResult, WritingStyleProfile, DominantColorsResult, ImageStyleResult } from '../types';
 
 // Initializing Gemini API client
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -234,7 +234,16 @@ export async function generateSpeech(text: string, voiceName: string = 'Zephyr')
 }
 
 export async function analyzeImage(base64Image: string, mimeType: string): Promise<ImageAnalysisResult> {
-    const prompt = "Analyze this image for AI-generation markers. Provide aiLikelihood (0-100) and analysis feature list.";
+    const prompt = `You are an AI forensics expert. Analyze this image in depth for signs of AI generation.
+
+For each finding, explain EXACTLY why it looks AI-generated using concrete, human-readable terms — e.g. "The skin pores are unnaturally uniform across the cheek, which real cameras never capture this consistently" or "The background bokeh has a mathematically perfect circular blur that no real lens produces."
+
+Also score these four categories 0–100 (higher = more AI-like):
+- Texture Realism: how uniform or synthetic textures look
+- Lighting Consistency: whether light sources and shadows are physically plausible
+- Edge Naturalness: whether borders between objects have natural imperfections
+- Noise & Grain: whether the image has realistic sensor noise or is suspiciously clean`;
+
     return generateWithRetry(async () => {
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
@@ -245,6 +254,17 @@ export async function analyzeImage(base64Image: string, mimeType: string): Promi
                     type: Type.OBJECT,
                     properties: {
                         aiLikelihood: { type: Type.NUMBER },
+                        categoryScores: {
+                            type: Type.ARRAY,
+                            items: {
+                                type: Type.OBJECT,
+                                properties: {
+                                    name: { type: Type.STRING },
+                                    score: { type: Type.NUMBER },
+                                },
+                                required: ['name', 'score']
+                            }
+                        },
                         analysis: {
                             type: Type.ARRAY,
                             items: {
@@ -258,7 +278,7 @@ export async function analyzeImage(base64Image: string, mimeType: string): Promi
                             }
                         }
                     },
-                    required: ['aiLikelihood', 'analysis']
+                    required: ['aiLikelihood', 'categoryScores', 'analysis']
                 },
                 temperature: 0.2,
                 safetySettings,
@@ -328,6 +348,48 @@ export async function getDominantColors(base64Image: string, mimeType: string): 
                             }
                         }
                     }
+                },
+                temperature: 0.2,
+                safetySettings,
+            },
+        });
+        return JSON.parse(response.text);
+    });
+}
+
+export async function generateImagePrompt(base64Image: string, mimeType: string): Promise<string> {
+    const instruction = `You are a professional AI prompt engineer. Analyze this image and reverse-engineer the exact text prompt that could have been used to generate it (or accurately describe it for generation).
+
+Include: subject and action, art style and medium, lighting setup, color palette, composition and framing, camera settings (if applicable), mood and atmosphere, and any technical parameters (like "8k", "hyperrealistic", "cinematic"). Format as a single rich paragraph prompt ready to paste into Midjourney, DALL-E, or Stable Diffusion.`;
+
+    return generateWithRetry(async () => {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: { parts: [{ text: instruction }, { inlineData: { data: base64Image, mimeType } }] },
+            config: { temperature: 0.4, safetySettings },
+        });
+        return response.text.trim();
+    });
+}
+
+export async function classifyImageStyle(base64Image: string, mimeType: string): Promise<ImageStyleResult> {
+    const instruction = `You are an AI image forensics expert. Identify what AI model or generation style this image most resembles, or whether it is a real photograph. Consider: Midjourney, DALL-E, Stable Diffusion, Adobe Firefly, Imagen, or Real Photo. Provide your top match, confidence 0-100, a one-sentence reasoning, and up to 2 alternative possibilities.`;
+
+    return generateWithRetry(async () => {
+        const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: { parts: [{ text: instruction }, { inlineData: { data: base64Image, mimeType } }] },
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        style: { type: Type.STRING },
+                        confidence: { type: Type.NUMBER },
+                        reasoning: { type: Type.STRING },
+                        alternates: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    },
+                    required: ['style', 'confidence', 'reasoning', 'alternates']
                 },
                 temperature: 0.2,
                 safetySettings,

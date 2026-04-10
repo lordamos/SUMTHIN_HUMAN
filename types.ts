@@ -23,9 +23,22 @@ export interface ImageAnalysisItem {
   recommendation: string;
 }
 
+export interface CategoryScore {
+  name: string;
+  score: number;
+}
+
 export interface ImageAnalysisResult {
   aiLikelihood: number;
+  categoryScores: CategoryScore[];
   analysis: ImageAnalysisItem[];
+}
+
+export interface ImageStyleResult {
+  style: string;
+  confidence: number;
+  reasoning: string;
+  alternates: string[];
 }
 
 export interface ColorInfo {
