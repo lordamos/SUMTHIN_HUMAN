@@ -37,6 +37,7 @@ interface BatchItem {
     isEdited: boolean;
     showSuccess: boolean; 
     draft: ImageDraftState | null;
+    precisionMode: boolean;
 }
 
 const filters = [
@@ -324,9 +325,18 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert,
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             transition={{ duration: 0.3 }}
-            className="p-6 rounded-3xl bg-black/20 border border-white/10 relative overflow-hidden group"
+            className="rounded-3xl relative overflow-hidden group"
+            style={{
+                background: 'linear-gradient(145deg, rgba(12,12,22,0.97), rgba(6,6,14,0.99))',
+                border: '1px solid rgba(255,255,255,0.07)',
+                boxShadow: '0 20px 60px -15px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03) inset'
+            }}
         >
-            <div className="flex flex-col lg:flex-row gap-6 items-start">
+            {/* Top accent line */}
+            <div className="absolute top-0 left-0 right-0 h-px" style={{ background: item.precisionMode ? 'linear-gradient(90deg, transparent, rgba(251,146,60,0.8), rgba(239,68,68,0.8), transparent)' : 'linear-gradient(90deg, transparent, rgba(20,184,166,0.4), rgba(139,92,246,0.4), transparent)' }} />
+            {/* Precision mode glow */}
+            {item.precisionMode && <div className="absolute -inset-px rounded-3xl pointer-events-none" style={{ background: 'transparent', boxShadow: '0 0 30px -5px rgba(251,146,60,0.15) inset' }} />}
+            <div className="p-5 flex flex-col lg:flex-row gap-6 items-start">
                 <div className="w-full lg:w-1/3 flex flex-col gap-4">
                     <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-black/40 aspect-square lg:aspect-auto group/image min-h-[250px] lg:h-auto">
                         <AnimatePresence>
@@ -432,116 +442,93 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({ item, onRemove, onRevert,
                         )}
                     </div>
 
-                    <div className="text-xs text-gray-400 truncate w-full px-1" title={item.file.name}>
-                        {item.file.name}
+                    <div className="flex items-center justify-between px-1">
+                        <p className="text-xs text-gray-400 truncate flex-1" title={item.file.name}>{item.file.name}</p>
+                        <button
+                            onClick={() => onUpdate(item.id, { precisionMode: !item.precisionMode })}
+                            title="Toggle Precision Mode — uses face/body detection for smarter edits"
+                            className={`ml-2 flex-shrink-0 flex items-center gap-1 text-[10px] font-black px-2 py-1 rounded-full transition-all ${item.precisionMode ? 'bg-orange-500/30 border border-orange-400/50 text-orange-300' : 'bg-white/5 border border-white/10 text-gray-500 hover:text-orange-400 hover:border-orange-500/30'}`}
+                        >
+                            🎯 {item.precisionMode ? 'PRECISION ON' : 'PRECISION'}
+                        </button>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                        <button
-                            onClick={() => onProcess(item.id, 'analyze')}
-                            disabled={isLoading}
-                            className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-all ${
-                                item.result 
-                                ? 'bg-teal-500/20 text-teal-300 border-teal-500/30' 
-                                : 'bg-white/5 text-gray-300 border-white/10 hover:bg-white/10'
-                            }`}
-                        >
-                            {item.loadingAction === 'analyze' ? <Spinner /> : 'Analyze'}
-                        </button>
-                        <button
-                            onClick={() => onProcess(item.id, 'describe')}
-                            disabled={isLoading}
-                            className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-all ${
-                                item.description
-                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                                : 'bg-white/5 text-gray-300 border-white/10 hover:bg-white/10'
-                            }`}
-                        >
-                             {item.loadingAction === 'describe' ? <Spinner /> : 'Describe'}
-                        </button>
-                        <button
-                            onClick={() => onProcess(item.id, 'tag')}
-                            disabled={isLoading}
-                            className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-all ${
-                                item.tags
-                                ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-                                : 'bg-white/5 text-gray-300 border-white/10 hover:bg-white/10'
-                            }`}
-                        >
-                             {item.loadingAction === 'tag' ? <Spinner /> : 'Tags'}
-                        </button>
-                        <button
-                            onClick={() => onProcess(item.id, 'color')}
-                            disabled={isLoading}
-                            className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-all ${
-                                item.colorResult
-                                ? 'bg-blue-500/20 text-blue-300 border-blue-500/30'
-                                : 'bg-white/5 text-gray-300 border-white/10 hover:bg-white/10'
-                            }`}
-                        >
-                             {item.loadingAction === 'color' ? <Spinner /> : 'Colors'}
-                        </button>
-                        <button
-                            onClick={onEdit}
-                            disabled={isLoading}
-                            className={`px-3 py-2 rounded-lg text-xs font-semibold border border-white/10 bg-white/5 text-gray-300 hover:bg-purple-500/20 hover:text-purple-300 hover:border-purple-500/30 transition-all flex items-center justify-center gap-2 ${item.isEdited || item.draft ? 'text-purple-300 border-purple-500/30 bg-purple-500/10' : ''}`}
-                        >
-                             <div className="scale-75 flex items-center justify-center"><MagicWandIcon /></div> 
-                             {item.draft ? 'Resume' : 'Editor'}
-                        </button>
-                        <button
-                            onClick={() => onSmartAnalysis(item.id)}
-                            disabled={isLoading}
-                            className="col-span-2 px-3 py-2 rounded-lg text-xs font-bold border border-teal-500/40 bg-gradient-to-r from-teal-500/20 to-blue-500/10 text-teal-300 hover:from-teal-500/30 hover:to-blue-500/20 transition-all flex items-center justify-center gap-2"
-                        >
-                            {item.loadingAction === 'smart' ? <><Spinner /> Running Pipeline...</> : '⚡ Smart Analysis'}
-                        </button>
-                        <button
-                            onClick={() => onGeneratePrompt(item.id)}
-                            disabled={isLoading}
-                            className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-all flex items-center justify-center gap-1 ${item.promptResult ? 'bg-violet-500/20 text-violet-300 border-violet-500/30' : 'bg-white/5 text-gray-300 border-white/10 hover:bg-violet-500/10 hover:text-violet-300 hover:border-violet-500/30'}`}
-                        >
-                            {item.loadingAction === 'prompt' ? <Spinner /> : '🔮 Gen Prompt'}
-                        </button>
-                        <button
-                            onClick={() => onClassifyStyle(item.id)}
-                            disabled={isLoading}
-                            className={`px-3 py-2 rounded-lg text-xs font-semibold border transition-all flex items-center justify-center gap-1 ${item.styleResult ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' : 'bg-white/5 text-gray-300 border-white/10 hover:bg-sky-500/10 hover:text-sky-300 hover:border-sky-500/30'}`}
-                        >
-                            {item.loadingAction === 'style' ? <Spinner /> : '🧬 Style DNA'}
-                        </button>
-                        <button
-                            onClick={() => onMakeHuman(item.id)}
-                            disabled={isLoading}
-                            className="col-span-2 px-3 py-2 rounded-lg text-xs font-bold border border-rose-500/40 bg-gradient-to-r from-rose-500/20 to-orange-500/10 text-rose-300 hover:from-rose-500/30 hover:to-orange-500/20 transition-all flex items-center justify-center gap-2"
-                        >
-                            {item.loadingAction === 'make-human' ? <><Spinner /> Humanizing Image...</> : '🧠 Make More Human'}
-                        </button>
-                        <div className="flex gap-1">
-                             <button
-                                onClick={() => onDownload(item)}
-                                title="Download locally"
-                                className="flex-1 py-2 px-1 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-xs font-semibold flex items-center justify-center"
-                            >
-                                <DownloadIcon className="scale-75" />
+                    {/* ── SECTION: Analysis ── */}
+                    <div className="rounded-2xl overflow-hidden border border-white/[0.06]" style={{ background: 'rgba(20,184,166,0.04)' }}>
+                        <div className="px-3 py-1.5 flex items-center gap-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-teal-500/70">🧠 Analysis</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5 p-2">
+                            <button onClick={() => onProcess(item.id, 'analyze')} disabled={isLoading} className={`px-2 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 ${item.result ? 'bg-teal-500/25 text-teal-300 border border-teal-500/30' : 'bg-white/[0.04] text-gray-400 border border-white/[0.06] hover:bg-teal-500/15 hover:text-teal-300'}`}>
+                                {item.loadingAction === 'analyze' ? <Spinner /> : '🔍 Analyze'}
                             </button>
-                            <button
-                                onClick={() => onSaveToCloud(item.id, 'google-drive')}
-                                title="Save to Google Drive"
-                                disabled={!!isExporting}
-                                className="flex-1 py-2 px-1 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-xs font-semibold flex items-center justify-center"
-                            >
-                                {isExporting === `${item.id}-google-drive` ? <Spinner /> : <GoogleDriveIcon className="scale-50" />}
+                            <button onClick={() => onProcess(item.id, 'describe')} disabled={isLoading} className={`px-2 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 ${item.description ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-white/[0.04] text-gray-400 border border-white/[0.06] hover:bg-amber-500/10 hover:text-amber-300'}`}>
+                                {item.loadingAction === 'describe' ? <Spinner /> : '📝 Describe'}
                             </button>
-                            <button
-                                onClick={() => onSaveToCloud(item.id, 'dropbox')}
-                                title="Save to Dropbox"
-                                disabled={!!isExporting}
-                                className="flex-1 py-2 px-1 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all text-xs font-semibold flex items-center justify-center"
-                            >
-                                {isExporting === `${item.id}-dropbox` ? <Spinner /> : <DropboxIcon className="scale-50 text-blue-400" />}
+                            <button onClick={() => onProcess(item.id, 'tag')} disabled={isLoading} className={`px-2 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 ${item.tags ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-white/[0.04] text-gray-400 border border-white/[0.06] hover:bg-purple-500/10 hover:text-purple-300'}`}>
+                                {item.loadingAction === 'tag' ? <Spinner /> : '🏷 Tags'}
                             </button>
-                         </div>
+                            <button onClick={() => onProcess(item.id, 'color')} disabled={isLoading} className={`px-2 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 ${item.colorResult ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-white/[0.04] text-gray-400 border border-white/[0.06] hover:bg-blue-500/10 hover:text-blue-300'}`}>
+                                {item.loadingAction === 'color' ? <Spinner /> : '🎨 Colors'}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* ── SECTION: AI Intelligence ── */}
+                    <div className="rounded-2xl overflow-hidden border border-white/[0.06]" style={{ background: 'rgba(139,92,246,0.04)' }}>
+                        <div className="px-3 py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-violet-500/70">⚡ AI Intelligence</span>
+                        </div>
+                        <div className="flex flex-col gap-1.5 p-2">
+                            <button onClick={() => onSmartAnalysis(item.id)} disabled={isLoading} className="w-full px-2 py-2 rounded-xl text-xs font-black border border-teal-500/25 transition-all flex items-center justify-center gap-1.5" style={{ background: 'linear-gradient(135deg, rgba(20,184,166,0.15), rgba(99,102,241,0.1))' }}>
+                                {item.loadingAction === 'smart' ? <><Spinner /> Running...</> : '⚡ Smart Analysis (Full Pipeline)'}
+                            </button>
+                            <div className="grid grid-cols-2 gap-1.5">
+                                <button onClick={() => onGeneratePrompt(item.id)} disabled={isLoading} className={`px-2 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 ${item.promptResult ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30' : 'bg-white/[0.04] text-gray-400 border border-white/[0.06] hover:bg-violet-500/10 hover:text-violet-300'}`}>
+                                    {item.loadingAction === 'prompt' ? <Spinner /> : '🔮 Gen Prompt'}
+                                </button>
+                                <button onClick={() => onClassifyStyle(item.id)} disabled={isLoading} className={`px-2 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1 ${item.styleResult ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30' : 'bg-white/[0.04] text-gray-400 border border-white/[0.06] hover:bg-sky-500/10 hover:text-sky-300'}`}>
+                                    {item.loadingAction === 'style' ? <Spinner /> : '🧬 Style DNA'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── SECTION: Transform ── */}
+                    <div className="rounded-2xl overflow-hidden border border-white/[0.06]" style={{ background: 'rgba(239,68,68,0.03)' }}>
+                        <div className="px-3 py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-rose-500/70">🎨 Transform</span>
+                            {item.precisionMode && <span className="ml-2 text-[9px] font-bold text-orange-400/80">🎯 Precision Active</span>}
+                        </div>
+                        <div className="flex flex-col gap-1.5 p-2">
+                            <button onClick={() => onMakeHuman(item.id)} disabled={isLoading} className="w-full px-2 py-2 rounded-xl text-xs font-black border border-rose-500/30 transition-all flex items-center justify-center gap-1.5" style={{ background: 'linear-gradient(135deg, rgba(239,68,68,0.15), rgba(249,115,22,0.1))' }}>
+                                {item.loadingAction === 'make-human' ? <><Spinner /> {item.precisionMode ? 'Precision Humanizing...' : 'Humanizing...'}</> : `🧠 Make More Human${item.precisionMode ? ' 🎯' : ''}`}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* ── SECTION: Studio ── */}
+                    <div className="rounded-2xl overflow-hidden border border-white/[0.06]" style={{ background: 'rgba(255,255,255,0.02)' }}>
+                        <div className="px-3 py-1.5" style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-gray-500/80">✏️ Studio</span>
+                        </div>
+                        <div className="p-2 flex flex-col gap-1.5">
+                            <button onClick={onEdit} disabled={isLoading} className={`w-full px-2 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${item.isEdited || item.draft ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' : 'bg-white/[0.04] text-gray-400 border border-white/[0.06] hover:bg-purple-500/10 hover:text-purple-300'}`}>
+                                <div className="scale-75"><MagicWandIcon /></div>
+                                {item.draft ? '✦ Resume Draft' : '✦ Magic Editor'}
+                            </button>
+                            <div className="flex gap-1.5">
+                                <button onClick={() => onDownload(item)} title="Download" className="flex-1 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] transition-all text-xs font-semibold flex items-center justify-center gap-1 text-gray-400 hover:text-white">
+                                    <DownloadIcon className="scale-75" /> Save
+                                </button>
+                                <button onClick={() => onSaveToCloud(item.id, 'google-drive')} title="Google Drive" disabled={!!isExporting} className="flex-1 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] transition-all text-xs flex items-center justify-center">
+                                    {isExporting === `${item.id}-google-drive` ? <Spinner /> : <GoogleDriveIcon className="scale-50" />}
+                                </button>
+                                <button onClick={() => onSaveToCloud(item.id, 'dropbox')} title="Dropbox" disabled={!!isExporting} className="flex-1 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] transition-all text-xs flex items-center justify-center text-blue-400">
+                                    {isExporting === `${item.id}-dropbox` ? <Spinner /> : <DropboxIcon className="scale-50" />}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -819,7 +806,8 @@ const ImageAnalyzer: React.FC = () => {
                     isTagsCopied: false,
                     isEdited: false,
                     showSuccess: false,
-                    draft: null
+                    draft: null,
+                    precisionMode: false,
                 } as BatchItem);
             });
             setItems(prev => [...prev, ...newItems]);
@@ -1053,11 +1041,21 @@ const ImageAnalyzer: React.FC = () => {
         setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: 'make-human', error: null } : i));
         try {
             const base64Image = await getBase64FromItem(item);
-            const edited = await editImage(
-                base64Image,
-                item.file.type,
-                "Make this image look more natural and less AI-generated. Add subtle imperfections, organic texture variation, realistic noise and grain, natural lighting irregularities, and slight asymmetry that real cameras and real scenes would produce. The result should pass as a real photograph."
-            );
+            let editPrompt = "Make this image look more natural and less AI-generated. Add subtle imperfections, organic texture variation, realistic noise and grain, natural lighting irregularities, and slight asymmetry that real cameras and real scenes would produce. The result should pass as a real photograph.";
+
+            if (item.precisionMode) {
+                try {
+                    const res = await fetch('/precision-edit', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ image: base64Image, prompt: editPrompt, edit_type: 'general' }),
+                    });
+                    const data = await res.json();
+                    if (data.enhanced_prompt) editPrompt = data.enhanced_prompt;
+                } catch {}
+            }
+
+            const edited = await editImage(base64Image, item.file.type, editPrompt);
             setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, preview: `data:${item.file.type};base64,${edited}`, isEdited: true } : i));
         } catch (err) {
             const msg = err instanceof Error ? err.message : 'Failed to humanize image.';
@@ -1205,6 +1203,9 @@ const ImageAnalyzer: React.FC = () => {
             description: null,
             tags: null,
             colorResult: null,
+            promptResult: null,
+            styleResult: null,
+            isPromptCopied: false,
             error: null,
             selectedFilter: 'none',
             isDescriptionCopied: false,
