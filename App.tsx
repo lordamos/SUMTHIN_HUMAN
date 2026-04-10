@@ -36,7 +36,7 @@ const Orb: React.FC<{ x: string; y: string; size: string; color: string; delay: 
 const ScanLine: React.FC = () => (
   <motion.div
     className="absolute left-0 right-0 h-px pointer-events-none"
-    style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(34,197,94,0.6) 40%, rgba(6,182,212,0.6) 60%, transparent 100%)' }}
+    style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(236,72,153,0.6) 40%, rgba(168,85,247,0.6) 60%, transparent 100%)' }}
     initial={{ top: '-2px' }}
     animate={{ top: ['0%', '100%', '100%'] }}
     transition={{ duration: 4, repeat: Infinity, repeatDelay: 3, ease: 'linear' }}
@@ -58,14 +58,14 @@ const TabButton: React.FC<TabButtonProps> = ({ label, isActive, onClick, icon })
         layoutId="tab-bg"
         className="absolute inset-0 rounded-xl"
         style={{
-          background: 'linear-gradient(135deg, rgba(34,197,94,0.18), rgba(6,182,212,0.12))',
-          border: '1px solid rgba(34,197,94,0.3)',
-          boxShadow: '0 0 24px rgba(34,197,94,0.12), inset 0 1px 0 rgba(34,197,94,0.15)',
+          background: 'linear-gradient(135deg, rgba(236,72,153,0.18), rgba(168,85,247,0.14))',
+          border: '1px solid rgba(236,72,153,0.3)',
+          boxShadow: '0 0 24px rgba(236,72,153,0.12), inset 0 1px 0 rgba(236,72,153,0.15)',
         }}
         transition={{ type: 'spring', stiffness: 400, damping: 30 }}
       />
     )}
-    <span className={`relative z-10 ${isActive ? 'text-green-400' : ''}`}>{icon}</span>
+    <span className={`relative z-10 ${isActive ? 'text-pink-400' : ''}`}>{icon}</span>
     <span className="relative z-10">{label}</span>
   </motion.button>
 );
@@ -82,7 +82,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col text-gray-100 font-sans overflow-x-hidden"
-      style={{ background: '#030507' }}>
+      style={{ background: '#07030e' }}>
 
       {/* ── Background layer ────────────────────────────────────── */}
       <div className="fixed inset-0 -z-10 pointer-events-none overflow-hidden">
@@ -91,10 +91,10 @@ const App: React.FC = () => {
           style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\'/%3E%3C/svg%3E")', backgroundSize: '256px' }} />
 
         {/* Ambient orbs */}
-        <Orb x="5%" y="10%" size="600px" color="radial-gradient(circle, rgba(34,197,94,0.2), transparent)" delay={0} />
-        <Orb x="65%" y="0%" size="700px" color="radial-gradient(circle, rgba(6,182,212,0.12), transparent)" delay={2} />
-        <Orb x="40%" y="55%" size="800px" color="radial-gradient(circle, rgba(249,115,22,0.07), transparent)" delay={4} />
-        <Orb x="-5%" y="60%" size="450px" color="radial-gradient(circle, rgba(34,197,94,0.08), transparent)" delay={1} />
+        <Orb x="5%" y="10%" size="600px" color="radial-gradient(circle, rgba(236,72,153,0.18), transparent)" delay={0} />
+        <Orb x="65%" y="0%" size="700px" color="radial-gradient(circle, rgba(168,85,247,0.13), transparent)" delay={2} />
+        <Orb x="40%" y="55%" size="800px" color="radial-gradient(circle, rgba(129,140,248,0.08), transparent)" delay={4} />
+        <Orb x="-5%" y="60%" size="450px" color="radial-gradient(circle, rgba(236,72,153,0.07), transparent)" delay={1} />
 
         {/* Animated neon light trails — inspired by logo */}
         <svg className="absolute inset-0 w-full h-full" xmlns="http://www.w3.org/2000/svg"
@@ -105,31 +105,31 @@ const App: React.FC = () => {
               <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
           </defs>
-          {/* Orange trail — bottom-left sweeping up to center-right */}
+          {/* Hot pink trail */}
           <LightTrail d="M -100,900 Q 150,700 380,480 T 640,180 T 820,-20"
-            color="#f97316" delay={0} duration={9} width={2.5} />
-          {/* Blue trail — parallel, slight offset */}
+            color="#ec4899" delay={0} duration={9} width={2.5} />
+          {/* Purple trail */}
           <LightTrail d="M -80,860 Q 170,660 400,440 T 660,140 T 840,-50"
-            color="#06b6d4" delay={0.6} duration={9} width={3} />
-          {/* Thinner orange accent */}
+            color="#a855f7" delay={0.6} duration={9} width={3} />
+          {/* Violet accent */}
           <LightTrail d="M -60,820 Q 190,620 420,400 T 680,100"
-            color="#fb923c" delay={1.4} duration={8} width={1.5} />
-          {/* Thin cyan accent */}
+            color="#c084fc" delay={1.4} duration={8} width={1.5} />
+          {/* Indigo accent */}
           <LightTrail d="M -120,940 Q 130,740 360,520 T 620,220 T 800,10"
-            color="#22d3ee" delay={2.2} duration={10} width={1.5} />
+            color="#818cf8" delay={2.2} duration={10} width={1.5} />
         </svg>
 
         {/* Dot grid */}
         <div className="absolute inset-0"
-          style={{ backgroundImage: 'radial-gradient(rgba(34,197,94,0.06) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+          style={{ backgroundImage: 'radial-gradient(rgba(168,85,247,0.07) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
 
         {/* Bottom vignette */}
         <div className="absolute bottom-0 left-0 right-0 h-64"
-          style={{ background: 'linear-gradient(to top, rgba(3,5,7,0.8), transparent)' }} />
+          style={{ background: 'linear-gradient(to top, rgba(7,3,14,0.85), transparent)' }} />
 
         {/* Background logo watermark */}
         <motion.img
-          src="/logo.png"
+          src="/logo2.webp"
           alt=""
           aria-hidden="true"
           className="absolute inset-0 m-auto w-[520px] max-w-[70vw] object-contain pointer-events-none select-none"
@@ -137,9 +137,9 @@ const App: React.FC = () => {
           animate={{
             opacity: [0.07, 0.16, 0.07],
             filter: [
-              'drop-shadow(0 0 40px rgba(34,197,94,0.0))',
-              'drop-shadow(0 0 90px rgba(34,197,94,0.15))',
-              'drop-shadow(0 0 40px rgba(34,197,94,0.0))',
+              'drop-shadow(0 0 40px rgba(168,85,247,0.0))',
+              'drop-shadow(0 0 90px rgba(168,85,247,0.18))',
+              'drop-shadow(0 0 40px rgba(168,85,247,0.0))',
             ],
           }}
           transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' }}
@@ -148,7 +148,7 @@ const App: React.FC = () => {
 
       {/* ── Header ──────────────────────────────────────────────── */}
       <header className="w-full flex items-center justify-between px-4 sm:px-6 py-2 sticky top-0 z-30 overflow-hidden"
-        style={{ background: 'rgba(3,5,7,0.85)', backdropFilter: 'blur(20px) saturate(180%)', borderBottom: '1px solid rgba(34,197,94,0.1)', boxShadow: '0 1px 30px rgba(0,0,0,0.5)' }}>
+        style={{ background: 'rgba(7,3,14,0.88)', backdropFilter: 'blur(20px) saturate(180%)', borderBottom: '1px solid rgba(168,85,247,0.15)', boxShadow: '0 1px 30px rgba(0,0,0,0.5)' }}>
 
         {/* Scan line inside header */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -158,11 +158,11 @@ const App: React.FC = () => {
         {/* Logo + brand */}
         <div className="flex items-center gap-3 relative z-10">
           <motion.div
-            animate={{ filter: ['drop-shadow(0 0 8px rgba(34,197,94,0.4))', 'drop-shadow(0 0 16px rgba(34,197,94,0.7))', 'drop-shadow(0 0 8px rgba(34,197,94,0.4))'] }}
+            animate={{ filter: ['drop-shadow(0 0 8px rgba(236,72,153,0.4))', 'drop-shadow(0 0 18px rgba(168,85,247,0.7))', 'drop-shadow(0 0 8px rgba(236,72,153,0.4))'] }}
             transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
           >
             <img
-              src="/logo.png"
+              src="/logo2.webp"
               alt="HayL3ditor"
               className="h-11 w-auto object-contain"
               style={{ imageRendering: 'crisp-edges' }}
@@ -170,7 +170,7 @@ const App: React.FC = () => {
           </motion.div>
           <div>
             <div className="text-[11px] font-black tracking-[0.3em] uppercase"
-              style={{ background: 'linear-gradient(90deg, #22c55e, #06b6d4)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              style={{ background: 'linear-gradient(90deg, #ec4899, #a855f7, #818cf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
               AI FORENSICS PLATFORM
             </div>
           </div>
@@ -182,19 +182,19 @@ const App: React.FC = () => {
           <div className="flex items-center gap-2">
             <motion.div
               className="flex items-center gap-1.5 px-3 py-1 rounded-full"
-              style={{ background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)' }}
-              animate={{ boxShadow: ['0 0 0 0 rgba(34,197,94,0)', '0 0 8px 2px rgba(34,197,94,0.15)', '0 0 0 0 rgba(34,197,94,0)'] }}
+              style={{ background: 'rgba(236,72,153,0.08)', border: '1px solid rgba(236,72,153,0.25)' }}
+              animate={{ boxShadow: ['0 0 0 0 rgba(236,72,153,0)', '0 0 8px 2px rgba(236,72,153,0.2)', '0 0 0 0 rgba(236,72,153,0)'] }}
               transition={{ duration: 2, repeat: Infinity }}
             >
-              <motion.div className="w-1.5 h-1.5 rounded-full bg-green-400"
+              <motion.div className="w-1.5 h-1.5 rounded-full bg-pink-400"
                 animate={{ opacity: [1, 0.2, 1] }} transition={{ duration: 1.2, repeat: Infinity }} />
-              <span className="text-[10px] text-green-400 font-black tracking-widest">LIVE</span>
+              <span className="text-[10px] text-pink-400 font-black tracking-widest">LIVE</span>
             </motion.div>
 
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-full"
-              style={{ background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.15)' }}>
-              <div className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
-              <span className="text-[10px] text-cyan-400 font-black tracking-widest">AI READY</span>
+              style={{ background: 'rgba(168,85,247,0.08)', border: '1px solid rgba(168,85,247,0.2)' }}>
+              <div className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+              <span className="text-[10px] text-purple-400 font-black tracking-widest">AI READY</span>
             </div>
           </div>
 
@@ -202,15 +202,15 @@ const App: React.FC = () => {
           <div className="text-[10px] text-gray-500 font-mono tabular-nums">{time.toLocaleTimeString()}</div>
 
           {/* Avatar dot */}
-          <motion.div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-green-500/30"
-            style={{ background: 'linear-gradient(135deg, #22c55e, #06b6d4)' }}
-            animate={{ boxShadow: ['0 0 8px rgba(34,197,94,0.2)', '0 0 18px rgba(34,197,94,0.5)', '0 0 8px rgba(34,197,94,0.2)'] }}
+          <motion.div className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-purple-500/30"
+            style={{ background: 'linear-gradient(135deg, #ec4899, #a855f7)' }}
+            animate={{ boxShadow: ['0 0 8px rgba(168,85,247,0.2)', '0 0 18px rgba(168,85,247,0.5)', '0 0 8px rgba(168,85,247,0.2)'] }}
             transition={{ duration: 2.5, repeat: Infinity }} />
         </div>
 
         {/* Mobile status */}
         <div className="flex sm:hidden items-center gap-2 relative z-10">
-          <motion.div className="w-1.5 h-1.5 rounded-full bg-green-400"
+          <motion.div className="w-1.5 h-1.5 rounded-full bg-pink-400"
             animate={{ opacity: [1, 0.2, 1] }} transition={{ duration: 1.2, repeat: Infinity }} />
           <div className="text-[10px] text-gray-500 font-mono">{time.toLocaleTimeString()}</div>
         </div>
@@ -228,7 +228,7 @@ const App: React.FC = () => {
             className="flex items-center justify-center pt-1"
           >
             <div className="flex items-center gap-1 p-1 rounded-2xl"
-              style={{ background: 'rgba(10,14,20,0.8)', border: '1px solid rgba(34,197,94,0.1)', backdropFilter: 'blur(16px)', boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(34,197,94,0.06)' }}>
+              style={{ background: 'rgba(10,5,18,0.85)', border: '1px solid rgba(168,85,247,0.15)', backdropFilter: 'blur(16px)', boxShadow: '0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(168,85,247,0.08)' }}>
               <TabButton
                 label="Text Analyzer"
                 isActive={analysisType === AnalysisType.Text}
@@ -251,20 +251,20 @@ const App: React.FC = () => {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="relative flex-1 rounded-3xl overflow-hidden"
             style={{
-              background: 'linear-gradient(160deg, rgba(10,15,22,0.97) 0%, rgba(5,8,12,0.99) 100%)',
-              border: '1px solid rgba(34,197,94,0.1)',
-              boxShadow: '0 40px 100px -20px rgba(0,0,0,0.9), 0 0 0 1px rgba(34,197,94,0.04) inset, 0 0 60px -30px rgba(34,197,94,0.08) inset',
+              background: 'linear-gradient(160deg, rgba(12,5,22,0.97) 0%, rgba(7,3,14,0.99) 100%)',
+              border: '1px solid rgba(168,85,247,0.12)',
+              boxShadow: '0 40px 100px -20px rgba(0,0,0,0.9), 0 0 0 1px rgba(168,85,247,0.04) inset, 0 0 60px -30px rgba(168,85,247,0.1) inset',
             }}
           >
-            {/* Top accent line — tri-color */}
+            {/* Top accent line — pink → purple → indigo */}
             <div className="absolute top-0 left-0 right-0 h-px"
-              style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(34,197,94,0.7) 30%, rgba(6,182,212,0.7) 60%, rgba(249,115,22,0.5) 85%, transparent 100%)' }} />
+              style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(236,72,153,0.8) 25%, rgba(168,85,247,0.8) 55%, rgba(129,140,248,0.6) 80%, transparent 100%)' }} />
 
             {/* Corner glow */}
             <div className="absolute top-0 left-0 w-40 h-40 pointer-events-none"
-              style={{ background: 'radial-gradient(circle at top left, rgba(34,197,94,0.06), transparent 70%)' }} />
+              style={{ background: 'radial-gradient(circle at top left, rgba(236,72,153,0.06), transparent 70%)' }} />
             <div className="absolute top-0 right-0 w-40 h-40 pointer-events-none"
-              style={{ background: 'radial-gradient(circle at top right, rgba(6,182,212,0.05), transparent 70%)' }} />
+              style={{ background: 'radial-gradient(circle at top right, rgba(168,85,247,0.06), transparent 70%)' }} />
 
             <div className="p-4 sm:p-6">
               <AnimatePresence mode="wait">
@@ -298,11 +298,11 @@ const App: React.FC = () => {
 
       {/* ── Footer ──────────────────────────────────────────────── */}
       <footer className="px-6 py-2 text-[10px] flex items-center justify-between"
-        style={{ borderTop: '1px solid rgba(34,197,94,0.07)', background: 'rgba(3,5,7,0.6)' }}>
-        <span className="text-gray-600">HayL3ditor • <span className="text-green-500/60">HAYLE EDITOR</span> • Powered by Gemini</span>
+        style={{ borderTop: '1px solid rgba(168,85,247,0.08)', background: 'rgba(7,3,14,0.7)' }}>
+        <span className="text-gray-600">HayL3ditor • <span className="text-purple-500/60">HAYLE EDITOR</span> • Powered by Gemini</span>
         <div className="flex items-center gap-3">
           <span className="text-gray-700">v2.1</span>
-          <span className="text-green-500/40">|</span>
+          <span className="text-purple-500/40">|</span>
           <span className="text-gray-700">Precision AI Engine</span>
         </div>
       </footer>

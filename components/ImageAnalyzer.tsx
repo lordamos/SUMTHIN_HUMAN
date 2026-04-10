@@ -1606,14 +1606,14 @@ const ImageAnalyzer: React.FC = () => {
                         className="flex flex-col items-center justify-center py-6 gap-4 select-none pointer-events-none"
                     >
                         <motion.img
-                            src="/logo.png"
+                            src="/logo2.webp"
                             alt="HayL3ditor"
                             className="w-48 sm:w-64 object-contain"
                             animate={{
                                 filter: [
-                                    'drop-shadow(0 0 12px rgba(34,197,94,0.22))',
-                                    'drop-shadow(0 0 26px rgba(34,197,94,0.52)) drop-shadow(0 0 45px rgba(6,182,212,0.18))',
-                                    'drop-shadow(0 0 12px rgba(34,197,94,0.22))',
+                                    'drop-shadow(0 0 12px rgba(236,72,153,0.22))',
+                                    'drop-shadow(0 0 26px rgba(168,85,247,0.52)) drop-shadow(0 0 45px rgba(129,140,248,0.18))',
+                                    'drop-shadow(0 0 12px rgba(236,72,153,0.22))',
                                 ],
                                 opacity: [0.72, 1, 0.72],
                             }}
@@ -1621,7 +1621,7 @@ const ImageAnalyzer: React.FC = () => {
                         />
                         <div className="flex flex-col items-center gap-1">
                             <p className="text-[11px] font-black tracking-[0.35em] uppercase"
-                                style={{ background: 'linear-gradient(90deg, #22c55e, #06b6d4, #f97316)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                                style={{ background: 'linear-gradient(90deg, #ec4899, #a855f7, #818cf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                                 AI Image Engine
                             </p>
                             <p className="text-[10px] text-gray-600 tracking-widest">Upload images to activate the swap &amp; forensics engine</p>

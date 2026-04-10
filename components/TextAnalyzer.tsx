@@ -526,15 +526,15 @@ const TextAnalyzer: React.FC = () => {
                         className="flex flex-col items-center justify-center py-10 gap-5 select-none pointer-events-none"
                     >
                         <motion.img
-                            src="/logo.png"
+                            src="/logo2.webp"
                             alt="HayL3ditor"
                             className="w-56 sm:w-72 object-contain"
-                            style={{ filter: 'drop-shadow(0 0 20px rgba(34,197,94,0.35))' }}
+                            style={{ filter: 'drop-shadow(0 0 20px rgba(168,85,247,0.35))' }}
                             animate={{
                                 filter: [
-                                    'drop-shadow(0 0 14px rgba(34,197,94,0.25))',
-                                    'drop-shadow(0 0 28px rgba(34,197,94,0.55)) drop-shadow(0 0 50px rgba(6,182,212,0.2))',
-                                    'drop-shadow(0 0 14px rgba(34,197,94,0.25))',
+                                    'drop-shadow(0 0 14px rgba(236,72,153,0.25))',
+                                    'drop-shadow(0 0 28px rgba(168,85,247,0.55)) drop-shadow(0 0 50px rgba(129,140,248,0.2))',
+                                    'drop-shadow(0 0 14px rgba(236,72,153,0.25))',
                                 ],
                                 opacity: [0.75, 1, 0.75],
                             }}
@@ -542,7 +542,7 @@ const TextAnalyzer: React.FC = () => {
                         />
                         <div className="flex flex-col items-center gap-1.5">
                             <p className="text-[11px] font-black tracking-[0.35em] uppercase"
-                                style={{ background: 'linear-gradient(90deg, #22c55e, #06b6d4, #f97316)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                                style={{ background: 'linear-gradient(90deg, #ec4899, #a855f7, #818cf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
                                 AI Forensics Platform
                             </p>
                             <p className="text-[10px] text-gray-600 tracking-widest">Paste text above and run an analysis to begin</p>
