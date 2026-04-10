@@ -10,7 +10,7 @@ import {
     BrushIcon, UndoIcon, CheckIcon, DownloadIcon, UploadIcon, 
     WatermarkIcon, MagicEraserIcon, HumanizerIcon, TrashIcon,
     UpscaleIcon, SparklesIcon, ImageIcon, SaveIcon, DiskIcon,
-    CloneIcon
+    CloneIcon, PencilIcon
 } from './Icons';
 
 interface ImageEditorProps {
