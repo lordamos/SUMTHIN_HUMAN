@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_file, Response
 from flask_cors import CORS
 import requests
 import os
@@ -6,6 +6,7 @@ import random
 import re
 import base64
 import io
+import tempfile
 import numpy as np
 
 app = Flask(__name__, static_url_path='/humanizer/static')
@@ -406,6 +407,159 @@ def humanizer_page():
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
+
+
+# ---------------------------------------------------------------------------
+# Video face swap — POST /video-face-swap
+# ---------------------------------------------------------------------------
+
+@app.route("/video-face-swap", methods=["POST"])
+def video_face_swap_route():
+    """
+    Accept multipart/form-data with:
+      - 'video': the video file
+      - 'face': the source face image
+    Returns the processed .mp4 file as a download.
+    """
+    try:
+        from video_engine import process_video
+
+        if "video" not in request.files or "face" not in request.files:
+            return jsonify({"error": "Missing 'video' or 'face' file."}), 400
+
+        video_file = request.files["video"]
+        face_file = request.files["face"]
+
+        # Save uploaded video to a temp file
+        tmp_video = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
+        video_file.save(tmp_video.name)
+        tmp_video.close()
+
+        # Read source face image
+        face_bytes = face_file.read()
+        import cv2
+        face_arr = np.frombuffer(face_bytes, dtype=np.uint8)
+        source_img = cv2.imdecode(face_arr, cv2.IMREAD_COLOR)
+        if source_img is None:
+            os.remove(tmp_video.name)
+            return jsonify({"error": "Could not decode face image."}), 400
+
+        # Process
+        output_path = process_video(tmp_video.name, source_img)
+        os.remove(tmp_video.name)
+
+        # Clean up output file after the response is sent
+        from flask import after_this_request
+
+        @after_this_request
+        def _cleanup_video(response):
+            try:
+                if os.path.exists(output_path):
+                    os.remove(output_path)
+            except Exception:
+                pass
+            return response
+
+        return send_file(
+            output_path,
+            mimetype="video/mp4",
+            as_attachment=True,
+            download_name="face_swapped.mp4"
+        )
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 422
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Live webcam face swap — session-based (avoids putting large payload in URL)
+# POST /webcam-swap/session  → upload face image, receive session token
+# GET  /webcam-swap?session=<token> → MJPEG stream with face swap applied
+# ---------------------------------------------------------------------------
+
+import uuid
+
+# In-memory session store: token -> numpy BGR image
+# Entries expire when the server restarts; fine for dev/live use
+_webcam_sessions: dict = {}
+
+
+@app.route("/webcam-swap/session", methods=["POST"])
+def webcam_swap_session():
+    """
+    Accept a face image as multipart/form-data or JSON base64.
+    Returns a short-lived session token.
+
+    Accepts:
+      - multipart/form-data with field 'face' (file upload)
+      - JSON body with field 'face' (base64 string, optionally data URI)
+    """
+    try:
+        import cv2
+        source_img = None
+
+        if request.files.get("face"):
+            face_bytes = request.files["face"].read()
+            face_arr = np.frombuffer(face_bytes, dtype=np.uint8)
+            source_img = cv2.imdecode(face_arr, cv2.IMREAD_COLOR)
+        else:
+            data = request.json or {}
+            face_b64 = data.get("face", "")
+            if not face_b64:
+                return jsonify({"error": "Missing face image."}), 400
+            if "," in face_b64:
+                face_b64 = face_b64.split(",", 1)[1]
+            face_bytes = base64.b64decode(face_b64)
+            face_arr = np.frombuffer(face_bytes, dtype=np.uint8)
+            source_img = cv2.imdecode(face_arr, cv2.IMREAD_COLOR)
+
+        if source_img is None:
+            return jsonify({"error": "Could not decode face image."}), 400
+
+        token = uuid.uuid4().hex
+        _webcam_sessions[token] = source_img
+        return jsonify({"session": token})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/webcam-swap", methods=["GET"])
+def webcam_swap_route():
+    """
+    Streams a multipart/x-mixed-replace JPEG stream from the webcam
+    with InsightFace face swap applied.
+    Query param: session — token returned by POST /webcam-swap/session
+    """
+    try:
+        from video_engine import webcam_swap_frames
+
+        token = request.args.get("session", "")
+        if not token or token not in _webcam_sessions:
+            return jsonify({"error": "Invalid or expired session token."}), 400
+
+        source_img = _webcam_sessions[token]
+
+        def generate():
+            boundary = b"--frame\r\n"
+            header = b"Content-Type: image/jpeg\r\n\r\n"
+            try:
+                for jpeg_bytes in webcam_swap_frames(source_img, frame_skip=2,
+                                                      resize_w=640, resize_h=480):
+                    yield boundary + header + jpeg_bytes + b"\r\n"
+            finally:
+                # Clean up session after stream ends
+                _webcam_sessions.pop(token, None)
+
+        return Response(
+            generate(),
+            mimetype="multipart/x-mixed-replace; boundary=frame"
+        )
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 422
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":
