@@ -63,7 +63,15 @@ exposeLocalhost = true
 localPort = 23636
 externalPort = 3002
 
+[[ports]]
+localPort = 23637
+externalPort = 3001
+
 [deployment]
 deploymentTarget = "static"
 build = ["npm", "run", "build"]
 publicDir = "dist"
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 180000
