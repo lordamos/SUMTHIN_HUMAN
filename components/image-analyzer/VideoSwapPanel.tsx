@@ -71,6 +71,34 @@ const VideoSwapPanel: React.FC = () => {
     const [liveStreamUrl, setLiveStreamUrl] = useState<string | null>(null);
     const liveFaceInputRef = useRef<HTMLInputElement>(null);
 
+    // Long-video warning threshold (seconds). null = disabled.
+    const STORAGE_KEY_THRESHOLD = 'videoWarningThresholdSeconds';
+    const DEFAULT_THRESHOLD = 5 * 60;
+    const [warningThreshold, setWarningThreshold] = useState<number | null>(() => {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_THRESHOLD);
+            if (raw === 'disabled') return null;
+            if (raw !== null) {
+                const parsed = parseInt(raw, 10);
+                if (!isNaN(parsed) && parsed > 0) return parsed;
+            }
+        } catch { /* ignore */ }
+        return DEFAULT_THRESHOLD;
+    });
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [customMinutes, setCustomMinutes] = useState('');
+
+    const applyThreshold = (value: number | null) => {
+        setWarningThreshold(value);
+        try {
+            if (value === null) {
+                localStorage.setItem(STORAGE_KEY_THRESHOLD, 'disabled');
+            } else {
+                localStorage.setItem(STORAGE_KEY_THRESHOLD, String(value));
+            }
+        } catch { /* ignore */ }
+    };
+
     // Job lookup state
     const [lookupOpen, setLookupOpen] = useState(false);
     const [lookupInput, setLookupInput] = useState('');
@@ -374,8 +402,7 @@ const VideoSwapPanel: React.FC = () => {
 
     const pct = Math.round(progress * 100);
 
-    const LONG_VIDEO_THRESHOLD_SECONDS = 5 * 60;
-    const isLongVideo = videoDuration !== null && videoDuration > LONG_VIDEO_THRESHOLD_SECONDS;
+    const isLongVideo = warningThreshold !== null && videoDuration !== null && videoDuration > warningThreshold;
 
     const formatDuration = (seconds: number) => {
         const h = Math.floor(seconds / 3600);
@@ -645,6 +672,80 @@ const VideoSwapPanel: React.FC = () => {
                                         No job found with that ID. It may have expired or the ID is incorrect.
                                     </div>
                                 )}
+                            </motion.div>
+                        )}
+                    </div>
+                    {/* Warning threshold settings */}
+                    <div className="rounded-xl border border-white/8 bg-black/20 overflow-hidden">
+                        <button
+                            onClick={() => setSettingsOpen(o => !o)}
+                            className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-bold text-gray-400 hover:text-gray-200 transition-colors"
+                        >
+                            <span>⚙️ Video settings</span>
+                            <span className="text-gray-600">{settingsOpen ? '▲' : '▼'}</span>
+                        </button>
+
+                        {settingsOpen && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="px-3 pb-3 space-y-3"
+                            >
+                                <div>
+                                    <p className="text-[10px] text-gray-500 mb-2">
+                                        Long-video warning threshold — show a warning when the selected video exceeds this length.
+                                        {warningThreshold !== null
+                                            ? <span className="text-amber-400/80"> Currently: {formatDuration(warningThreshold)}</span>
+                                            : <span className="text-gray-500"> Currently: disabled</span>
+                                        }
+                                    </p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {[
+                                            { label: 'Off', value: null },
+                                            { label: '2 min', value: 2 * 60 },
+                                            { label: '5 min', value: 5 * 60 },
+                                            { label: '10 min', value: 10 * 60 },
+                                            { label: '15 min', value: 15 * 60 },
+                                            { label: '30 min', value: 30 * 60 },
+                                        ].map(({ label, value }) => {
+                                            const active = warningThreshold === value;
+                                            return (
+                                                <button
+                                                    key={label}
+                                                    onClick={() => applyThreshold(value)}
+                                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${active ? 'border-amber-500/60 bg-amber-500/20 text-amber-300' : 'border-white/10 bg-white/5 text-gray-400 hover:text-gray-200 hover:border-white/20'}`}
+                                                >
+                                                    {label}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="999"
+                                        value={customMinutes}
+                                        onChange={e => setCustomMinutes(e.target.value)}
+                                        placeholder="Custom (min)"
+                                        className="w-32 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-amber-500/50"
+                                    />
+                                    <button
+                                        onClick={() => {
+                                            const mins = Math.min(999, Math.max(0.1, parseFloat(customMinutes)));
+                                            if (!isNaN(mins) && mins > 0) {
+                                                applyThreshold(Math.round(mins * 60));
+                                                setCustomMinutes('');
+                                            }
+                                        }}
+                                        disabled={!customMinutes || isNaN(parseFloat(customMinutes)) || parseFloat(customMinutes) <= 0}
+                                        className="px-3 py-1.5 rounded-lg text-[10px] font-black border border-amber-500/40 bg-amber-500/15 text-amber-300 hover:bg-amber-500/25 transition-all disabled:opacity-40"
+                                    >
+                                        Set
+                                    </button>
+                                </div>
                             </motion.div>
                         )}
                     </div>
