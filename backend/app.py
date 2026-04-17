@@ -455,6 +455,8 @@ def video_face_swap_route():
             "output_path": None,
             "cancel_event": cancel_event,
             "error": None,
+            "created_at": time.time(),
+            "last_polled_at": time.time(),
         }
 
         t = threading.Thread(
@@ -476,6 +478,7 @@ def video_progress_route(job_id: str):
     job = _video_jobs.get(job_id)
     if job is None:
         return jsonify({"error": "Job not found."}), 404
+    job["last_polled_at"] = time.time()
     return jsonify({
         "status": job["status"],
         "progress": job["progress"],
@@ -536,6 +539,7 @@ def video_result_route(job_id: str):
 
 import uuid
 import threading
+import time
 
 # In-memory session store: token -> numpy BGR image
 # Entries expire when the server restarts; fine for dev/live use
@@ -544,8 +548,47 @@ _webcam_sessions: dict = {}
 # ---------------------------------------------------------------------------
 # Video job store
 # ---------------------------------------------------------------------------
-# Each job: {status, progress, frame, total, output_path, cancel_event, error}
+# Each job: {status, progress, frame, total, output_path, cancel_event, error,
+#            created_at}
 _video_jobs: dict = {}
+
+# How long (seconds) before an undownloaded job is considered abandoned.
+# Override via the VIDEO_JOB_TTL env var (default: 3600 = 1 hour).
+_VIDEO_JOB_TTL = int(os.getenv("VIDEO_JOB_TTL", "3600"))
+# How often (seconds) the cleanup sweep runs.
+_VIDEO_JOB_SWEEP_INTERVAL = 60
+
+
+def _cleanup_video_jobs() -> None:
+    """Background daemon that purges abandoned jobs older than _VIDEO_JOB_TTL.
+
+    Staleness is measured from last_polled_at so that actively-watched
+    long-running jobs are never evicted mid-processing.
+    """
+    while True:
+        time.sleep(_VIDEO_JOB_SWEEP_INTERVAL)
+        cutoff = time.time() - _VIDEO_JOB_TTL
+        stale = [jid for jid, job in list(_video_jobs.items())
+                 if job.get("last_polled_at", job.get("created_at", 0)) < cutoff]
+        for jid in stale:
+            job = _video_jobs.pop(jid, None)
+            if job is None:
+                continue
+            # Signal any still-running thread to stop
+            cancel_event = job.get("cancel_event")
+            if cancel_event is not None:
+                cancel_event.set()
+            # Delete any output file left on disk
+            output_path = job.get("output_path")
+            if output_path and os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except Exception:
+                    pass
+
+
+_cleanup_thread = threading.Thread(target=_cleanup_video_jobs, daemon=True)
+_cleanup_thread.start()
 
 
 def _run_video_job(job_id: str, video_path: str, source_img) -> None:
