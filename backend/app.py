@@ -829,5 +829,39 @@ def webcam_swap_route():
         return jsonify({"error": str(e)}), 500
 
 
+@app.route("/video-jobs/stats", methods=["GET"])
+def video_jobs_stats():
+    """Return aggregate stats about current video jobs and disk usage."""
+    counts: dict = {s: 0 for s in ("running", "done", "error", "cancelled")}
+    total_bytes = 0
+    oldest_age: float | None = None
+    now = time.time()
+
+    for job in list(_video_jobs.values()):
+        status = job.get("status", "unknown")
+        counts[status] = counts.get(status, 0) + 1
+
+        output_path = job.get("output_path")
+        if output_path and os.path.exists(output_path):
+            try:
+                total_bytes += os.path.getsize(output_path)
+            except OSError:
+                pass
+
+        created_at = job.get("created_at")
+        if created_at is not None:
+            age = now - created_at
+            if oldest_age is None or age > oldest_age:
+                oldest_age = age
+
+    return jsonify({
+        "counts": counts,
+        "total_jobs": len(_video_jobs),
+        "output_bytes": total_bytes,
+        "oldest_job_age_seconds": round(oldest_age, 1) if oldest_age is not None else None,
+        "ttl_seconds": _VIDEO_JOB_TTL,
+    })
+
+
 if __name__ == "__main__":
     app.run(host="localhost", port=8000, threaded=True)

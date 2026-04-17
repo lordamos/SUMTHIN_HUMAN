@@ -2,8 +2,49 @@ import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Spinner from '../Spinner';
 
+interface JobStats {
+    counts: Record<string, number>;
+    total_jobs: number;
+    output_bytes: number;
+    oldest_job_age_seconds: number | null;
+    ttl_seconds: number;
+}
+
+function formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
+function formatAge(seconds: number): string {
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+    return `${(seconds / 3600).toFixed(1)}h`;
+}
+
 const VideoSwapPanel: React.FC = () => {
     const [videoMode, setVideoMode] = useState<'video' | 'live'>('video');
+    const [jobStats, setJobStats] = useState<JobStats | null>(null);
+    const statsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    const fetchStats = async () => {
+        try {
+            const res = await fetch('/video-jobs/stats');
+            if (res.ok) setJobStats(await res.json());
+        } catch {
+            // Non-critical — ignore silently
+        }
+    };
+
+    useEffect(() => {
+        fetchStats();
+        statsIntervalRef.current = setInterval(fetchStats, 30_000);
+        return () => {
+            if (statsIntervalRef.current !== null) clearInterval(statsIntervalRef.current);
+        };
+    }, []);
 
     const [videoFile, setVideoFile] = useState<File | null>(null);
     const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
@@ -55,6 +96,7 @@ const VideoSwapPanel: React.FC = () => {
                     stopPolling();
                     setIsProcessing(false);
                     setJobId(null);
+                    fetchStats();
                     // Fetch the result video
                     try {
                         const resultRes = await fetch(`/video-result/${id}`);
@@ -73,11 +115,13 @@ const VideoSwapPanel: React.FC = () => {
                     setJobId(null);
                     setProgress(0);
                     setFrameInfo({ current: 0, total: 0 });
+                    fetchStats();
                 } else if (data.status === 'error') {
                     stopPolling();
                     setIsProcessing(false);
                     setJobId(null);
                     setVideoError(data.error || 'Processing failed.');
+                    fetchStats();
                 }
             } catch {
                 // Transient network error — keep polling
@@ -170,6 +214,7 @@ const VideoSwapPanel: React.FC = () => {
             const { job_id } = await res.json();
             setJobId(job_id);
             startPolling(job_id);
+            fetchStats();
         } catch (err) {
             setVideoError(err instanceof Error ? err.message : 'Video face swap failed.');
             setIsProcessing(false);
@@ -187,6 +232,7 @@ const VideoSwapPanel: React.FC = () => {
         setFrameInfo({ current: 0, total: 0 });
         // Fire-and-forget cancel request to stop the backend job
         fetch(`/video-cancel/${id}`, { method: 'DELETE' }).catch(() => {});
+        fetchStats();
     };
 
     const handleLiveFaceSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -234,6 +280,35 @@ const VideoSwapPanel: React.FC = () => {
 
     return (
         <div className="space-y-5">
+            {jobStats !== null && (
+                <div className="flex flex-wrap items-center gap-2 px-3 py-2 rounded-xl bg-black/30 border border-white/8 text-[10px] font-mono">
+                    <span className="text-gray-500 uppercase tracking-widest font-bold">Storage</span>
+                    <span className="ml-1 px-2 py-0.5 rounded-full bg-white/5 text-gray-300">
+                        {jobStats.output_bytes > 0 ? formatBytes(jobStats.output_bytes) : '0 B'} on disk
+                    </span>
+                    {jobStats.total_jobs > 0 && (
+                        <span className="px-2 py-0.5 rounded-full bg-white/5 text-gray-300">
+                            {jobStats.total_jobs} job{jobStats.total_jobs !== 1 ? 's' : ''}
+                            {Object.entries(jobStats.counts).map(([s, n]) => (
+                                <span key={s} className={`ml-1.5 ${s === 'running' ? 'text-emerald-400' : s === 'done' ? 'text-cyan-400' : s === 'error' ? 'text-red-400' : 'text-gray-500'}`}>
+                                    {n} {s}
+                                </span>
+                            ))}
+                        </span>
+                    )}
+                    {jobStats.oldest_job_age_seconds !== null && (
+                        <span className="px-2 py-0.5 rounded-full bg-white/5 text-gray-400">
+                            oldest: {formatAge(jobStats.oldest_job_age_seconds)}
+                        </span>
+                    )}
+                    <span className="px-2 py-0.5 rounded-full bg-white/5 text-gray-500">
+                        TTL {formatAge(jobStats.ttl_seconds)}
+                    </span>
+                    {jobStats.total_jobs === 0 && (
+                        <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400">clean</span>
+                    )}
+                </div>
+            )}
             <div className="flex rounded-xl overflow-hidden border border-white/10 bg-black/30">
                 <button
                     onClick={() => { setVideoMode('video'); handleStopLive(); }}
