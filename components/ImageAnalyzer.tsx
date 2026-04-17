@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { analyzeImage, describeImage, generateImageTags, editImage, getDominantColors, generateImagePrompt, classifyImageStyle } from '../services/geminiService';
-import type { ImageDraftState, CloudProvider } from '../types';
+import type { ImageDraftState } from '../types';
 import Spinner from './Spinner';
 import ErrorDisplay from './ErrorDisplay';
 import ImageEditor from './ImageEditor';
@@ -18,7 +18,6 @@ const ImageAnalyzer: React.FC = () => {
     const [items, setItems] = useState<BatchItem[]>([]);
     const [isDragActive, setIsDragActive] = useState(false);
     const [globalError, setGlobalError] = useState<string | null>(null);
-    const [isExporting, setIsExporting] = useState<string | null>(null);
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
     const [editorBase64, setEditorBase64] = useState<string | null>(null);
 
@@ -260,11 +259,6 @@ const ImageAnalyzer: React.FC = () => {
         setItems(prev => { const updated = prev.map(item => item.id === editingItemId ? { ...item, draft } : item); saveDraftsToStorage(updated); return updated; });
     };
 
-    const handleSaveToCloud = async (id: string, provider: CloudProvider) => {
-        setIsExporting(`${id}-${provider}`);
-        setTimeout(() => { setIsExporting(null); alert(`Image saved to ${provider === 'google-drive' ? 'Google Drive' : 'Dropbox'}!`); }, 2000);
-    };
-
     const editingItem = items.find(i => i.id === editingItemId);
 
     useEffect(() => {
@@ -344,8 +338,6 @@ const ImageAnalyzer: React.FC = () => {
                                         onUpdate={updateItemState}
                                         onDownload={handleDownload}
                                         onEdit={() => setEditingItemId(item.id)}
-                                        isExporting={isExporting}
-                                        onSaveToCloud={handleSaveToCloud}
                                         onSmartAnalysis={processSmartAnalysis}
                                         onGeneratePrompt={handleGeneratePrompt}
                                         onClassifyStyle={handleClassifyStyle}

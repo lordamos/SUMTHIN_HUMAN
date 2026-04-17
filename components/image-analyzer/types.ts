@@ -1,6 +1,6 @@
-import type { ImageAnalysisResult, ImageTagsResult, ImageDraftState, DominantColorsResult, CloudProvider, ImageStyleResult } from '../../types';
+import type { ImageAnalysisResult, ImageTagsResult, ImageDraftState, DominantColorsResult, ImageStyleResult } from '../../types';
 
-export type LoadingAction = 'analyze' | 'describe' | 'tag' | 'color' | 'smart' | 'edit-bg' | 'edit-watermark' | 'edit-upscale' | 'cloud' | 'prompt' | 'style' | 'make-human' | 'face-swap' | 'face-swap-multi' | 'outfit-swap' | 'detect-faces' | null;
+export type LoadingAction = 'analyze' | 'describe' | 'tag' | 'color' | 'smart' | 'edit-bg' | 'edit-watermark' | 'edit-upscale' | 'prompt' | 'style' | 'make-human' | 'face-swap' | 'face-swap-multi' | 'outfit-swap' | 'detect-faces' | null;
 
 export interface BatchItem {
     id: string;
@@ -35,8 +35,6 @@ export interface BatchItemCardProps {
     onUpdate: (id: string, updates: Partial<BatchItem>) => void;
     onDownload: (item: BatchItem) => void;
     onEdit: () => void;
-    isExporting: string | null;
-    onSaveToCloud: (id: string, provider: CloudProvider) => void;
     onSmartAnalysis: (id: string) => void;
     onGeneratePrompt: (id: string) => void;
     onClassifyStyle: (id: string) => void;

@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { CloudProvider } from '../../types';
 import type { BatchItem, BatchItemCardProps, LoadingAction } from './types';
 import { filterClasses, filters } from './types';
 import ImageInspector from './ImageInspector';
@@ -13,12 +12,12 @@ import ErrorDisplay from '../ErrorDisplay';
 import {
     DownloadIcon, DescribeIcon, ClipboardIcon, CheckIcon,
     FilterIcon, TrashIcon, UndoIcon, MagicWandIcon,
-    PaletteIcon, GoogleDriveIcon, DropboxIcon, DiskIcon
+    PaletteIcon, DiskIcon
 } from '../Icons';
 
 const BatchItemCard: React.FC<BatchItemCardProps> = ({
     item, onRemove, onRevert, onProcess, onUpdate, onDownload, onEdit,
-    isExporting, onSaveToCloud, onSmartAnalysis, onGeneratePrompt,
+    onSmartAnalysis, onGeneratePrompt,
     onClassifyStyle, onMakeHuman, onFaceSwap, onOutfitSwap, onDetectFaces
 }) => {
     const isLoading = !!item.loadingAction;
@@ -426,17 +425,9 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({
                                 <div className="scale-75"><MagicWandIcon /></div>
                                 {item.draft ? '✦ Resume Draft' : '✦ Magic Editor'}
                             </button>
-                            <div className="flex gap-1.5">
-                                <button onClick={() => onDownload(item)} title="Download" className="flex-1 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] transition-all text-xs font-semibold flex items-center justify-center gap-1 text-gray-400 hover:text-white">
-                                    <DownloadIcon className="scale-75" /> Save
-                                </button>
-                                <button onClick={() => onSaveToCloud(item.id, 'google-drive')} title="Google Drive" disabled={!!isExporting} className="flex-1 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] transition-all text-xs flex items-center justify-center">
-                                    {isExporting === `${item.id}-google-drive` ? <Spinner /> : <GoogleDriveIcon className="scale-50" />}
-                                </button>
-                                <button onClick={() => onSaveToCloud(item.id, 'dropbox')} title="Dropbox" disabled={!!isExporting} className="flex-1 py-2 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] transition-all text-xs flex items-center justify-center text-blue-400">
-                                    {isExporting === `${item.id}-dropbox` ? <Spinner /> : <DropboxIcon className="scale-50" />}
-                                </button>
-                            </div>
+                            <button onClick={() => onDownload(item)} title="Download" className="w-full py-2 rounded-xl bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] transition-all text-xs font-semibold flex items-center justify-center gap-1 text-gray-400 hover:text-white">
+                                <DownloadIcon className="scale-75" /> Download
+                            </button>
                         </div>
                     </div>
                 </div>

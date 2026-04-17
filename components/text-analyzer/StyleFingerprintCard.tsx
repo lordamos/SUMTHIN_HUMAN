@@ -24,7 +24,8 @@ const StyleFingerprintCard: React.FC<Props> = ({ rephrasedGptResults, writingSty
                 ) : writingStyle ? (
                     <div className="text-xs space-y-1">
                         {writingStyle.tone && <div className="flex items-center gap-2"><span className="text-slate-500">Tone:</span><span className="text-indigo-300 font-medium capitalize">{writingStyle.tone}</span></div>}
-                        {(writingStyle as any).vocabulary && <div className="flex items-center gap-2"><span className="text-slate-500">Vocabulary:</span><span className="text-indigo-300 font-medium capitalize">{(writingStyle as any).vocabulary}</span></div>}
+                        {writingStyle.complexity && <div className="flex items-center gap-2"><span className="text-slate-500">Complexity:</span><span className="text-indigo-300 font-medium capitalize">{writingStyle.complexity}</span></div>}
+                        {writingStyle.useContractions && <div className="flex items-center gap-2"><span className="text-slate-500">Contractions:</span><span className="text-indigo-300 font-medium capitalize">{writingStyle.useContractions}</span></div>}
                         <p className="text-slate-600 italic text-[10px] mt-1">Style active — use "Rephrase with GPT" to apply</p>
                     </div>
                 ) : (
