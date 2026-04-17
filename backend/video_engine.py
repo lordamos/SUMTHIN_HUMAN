@@ -2,64 +2,16 @@
 Video Face Swap Engine
 Reads uploaded video frame-by-frame, applies InsightFace face swap to each frame,
 and rebuilds the output video using MoviePy.
+
+InsightFace initialization is delegated to face_engine.py so the model
+is loaded only once and shared with ai_edit_engine.py.
 """
 import cv2
 import numpy as np
 import os
 import tempfile
 
-# ---------------------------------------------------------------------------
-# GPU / CPU context detection
-# ---------------------------------------------------------------------------
-
-def _get_ctx_id() -> int:
-    """Return 0 if a CUDA-capable GPU is available, else -1 (CPU)."""
-    try:
-        import onnxruntime as ort
-        providers = ort.get_available_providers()
-        if "CUDAExecutionProvider" in providers:
-            return 0
-    except Exception:
-        pass
-    return -1
-
-
-# ---------------------------------------------------------------------------
-# InsightFace lazy init (reuses the same init logic from ai_edit_engine)
-# ---------------------------------------------------------------------------
-
-_face_app = None
-_swapper = None
-_ready = False
-
-
-def _init():
-    global _face_app, _swapper, _ready
-    if _ready:
-        return True
-    try:
-        from insightface.app import FaceAnalysis
-        from insightface.model_zoo import get_model
-
-        ctx_id = _get_ctx_id()
-        _face_app = FaceAnalysis(name="buffalo_l",
-                                 providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
-                                 if ctx_id == 0 else ["CPUExecutionProvider"])
-        _face_app.prepare(ctx_id=ctx_id, det_size=(640, 640))
-
-        model_path = os.path.join(os.path.expanduser("~"), ".insightface",
-                                  "models", "inswapper_128.onnx")
-        if not os.path.exists(model_path):
-            _swapper = get_model("inswapper_128.onnx", download=True, download_zip=True)
-        else:
-            _swapper = get_model(model_path)
-
-        _ready = True
-        return True
-    except Exception as e:
-        print(f"[video_engine] InsightFace init failed: {e}")
-        return False
-
+import face_engine
 
 # ---------------------------------------------------------------------------
 # Core frame-swap helper
@@ -67,13 +19,14 @@ def _init():
 
 def swap_face_on_frame(frame_bgr: np.ndarray, src_face) -> np.ndarray:
     """Swap the first detected face in frame_bgr with src_face."""
-    if _face_app is None or _swapper is None:
+    swapper = face_engine.get_swapper()
+    if swapper is None:
         return frame_bgr
-    faces = _face_app.get(frame_bgr)
+    faces = face_engine.get_faces(frame_bgr)
     if not faces:
         return frame_bgr
     result = frame_bgr.copy()
-    result = _swapper.get(result, faces[0], src_face, paste_back=True)
+    result = swapper.get(result, faces[0], src_face, paste_back=True)
     return result
 
 
@@ -87,11 +40,13 @@ def process_video(video_path: str, source_img: np.ndarray,
     Process every frame of video_path, swap faces, write to output_path.
     Returns the output file path.
     """
-    if not _init():
+    if not face_engine.init():
         raise RuntimeError("InsightFace not available.")
 
+    face_app = face_engine.get_face_app()
+
     # Get source face embedding
-    faces_source = _face_app.get(source_img)
+    faces_source = face_app.get(source_img)
     if not faces_source:
         raise RuntimeError("No face detected in source image.")
     src_face = faces_source[0]
@@ -148,10 +103,11 @@ def webcam_swap_frames(source_img: np.ndarray, frame_skip: int = 2,
     with face swap applied every `frame_skip` frames.
     Falls back to raw frames when InsightFace is unavailable.
     """
-    if not _init():
+    if not face_engine.init():
         print("[video_engine] InsightFace not ready for webcam stream.")
 
-    faces_source = _face_app.get(source_img) if _face_app else []
+    face_app = face_engine.get_face_app()
+    faces_source = face_app.get(source_img) if face_app else []
     src_face = faces_source[0] if faces_source else None
 
     cap = cv2.VideoCapture(0)
@@ -175,7 +131,7 @@ def webcam_swap_frames(source_img: np.ndarray, frame_skip: int = 2,
 
             if src_face is not None and frame_count % frame_skip == 0:
                 last_swapped = swap_face_on_frame(frame, src_face)
-            
+
             output_frame = last_swapped if last_swapped is not None else frame
 
             _, buf = cv2.imencode(".jpg", output_frame,

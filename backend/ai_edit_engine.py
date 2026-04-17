@@ -2,44 +2,18 @@
 AI Edit Engine — Face Swap + Outfit Swap + Realism Boost
 Supports: InsightFace face swapping, MediaPipe outfit segmentation,
           realism post-processing, Nano Banana hook, model switching.
+
+InsightFace initialization is delegated to face_engine.py so the model
+is loaded only once and shared with video_engine.py.
 """
 import cv2
 import numpy as np
 import base64
-import os
 import requests
 from io import BytesIO
 from PIL import Image
 
-# ---------------------------------------------------------------------------
-# InsightFace — lazy init so the server starts even if models aren't ready
-# ---------------------------------------------------------------------------
-_face_app = None
-_swapper = None
-_insightface_ready = False
-
-def _init_insightface():
-    global _face_app, _swapper, _insightface_ready
-    if _insightface_ready:
-        return True
-    try:
-        from insightface.app import FaceAnalysis
-        from insightface.model_zoo import get_model
-
-        _face_app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
-        _face_app.prepare(ctx_id=-1, det_size=(640, 640))
-
-        model_path = os.path.join(os.path.expanduser("~"), ".insightface", "models", "inswapper_128.onnx")
-        if not os.path.exists(model_path):
-            _swapper = get_model("inswapper_128.onnx", download=True, download_zip=True)
-        else:
-            _swapper = get_model(model_path)
-
-        _insightface_ready = True
-        return True
-    except Exception as e:
-        print(f"[ai_edit_engine] InsightFace init failed: {e}")
-        return False
+import face_engine
 
 # ---------------------------------------------------------------------------
 # Image helpers
@@ -57,19 +31,16 @@ def image_to_base64(img_bgr: np.ndarray) -> str:
     pil_img.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode("utf-8")
 
-def _detect_raw(img_bgr: np.ndarray):
-    return _face_app.get(img_bgr)
-
 # ---------------------------------------------------------------------------
 # Face detection with bounding boxes
 # ---------------------------------------------------------------------------
 
 def detect_faces_with_coords(image: np.ndarray) -> dict:
     """Return bounding boxes + image dimensions for all detected faces."""
-    if not _init_insightface():
+    if not face_engine.init():
         raise RuntimeError("InsightFace not available.")
 
-    faces = _face_app.get(image)
+    faces = face_engine.get_faces(image)
     h, w = image.shape[:2]
     result = []
     for i, f in enumerate(faces):
@@ -87,11 +58,12 @@ def detect_faces_with_coords(image: np.ndarray) -> dict:
 def face_swap_selected(source_img: np.ndarray, target_img: np.ndarray,
                        face_indices: list) -> np.ndarray:
     """Swap faces at the given indices in target with source faces."""
-    if not _init_insightface() or _swapper is None:
+    if not face_engine.init() or face_engine.get_swapper() is None:
         raise RuntimeError("InsightFace model not available.")
 
-    faces_source = _detect_raw(source_img)
-    faces_target = _detect_raw(target_img)
+    swapper = face_engine.get_swapper()
+    faces_source = face_engine.get_faces(source_img)
+    faces_target = face_engine.get_faces(target_img)
 
     if not faces_source or not faces_target:
         raise RuntimeError("No faces detected in one or both images.")
@@ -103,7 +75,7 @@ def face_swap_selected(source_img: np.ndarray, target_img: np.ndarray,
 
     for idx in indices_to_swap:
         if 0 <= idx < len(faces_target):
-            result = _swapper.get(result, faces_target[idx], src_face, paste_back=True)
+            result = swapper.get(result, faces_target[idx], src_face, paste_back=True)
 
     return result
 

@@ -9,6 +9,8 @@ import io
 import tempfile
 import numpy as np
 
+from config import OPENROUTER_TEXT_MODEL
+
 app = Flask(__name__, static_url_path='/humanizer/static')
 CORS(app)
 
@@ -57,7 +59,7 @@ def ai_humanize(text, mode):
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "openai/gpt-4o-mini",
+                    "model": OPENROUTER_TEXT_MODEL,
                     "messages": [
                         {"role": "system", "content": prompt_modes.get(mode, prompt_modes["casual"])},
                         {"role": "user", "content": text}
