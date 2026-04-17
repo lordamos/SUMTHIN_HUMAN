@@ -155,10 +155,17 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageBase64, mimeType, initia
     };
 
     const [history, setHistory] = useState<string[]>(() => {
+        if (initialDraft?.history && initialDraft.history.length > 1) {
+            return initialDraft.history.map(b64 => trackBlobUrl(b64ToBlobUrl(b64, mimeType)));
+        }
         const initial = trackBlobUrl(b64ToBlobUrl(initialDraft?.currentImage || imageBase64, mimeType));
         return [initial];
     });
-    const [historyIndex, setHistoryIndex] = useState(0);
+    const [historyIndex, setHistoryIndex] = useState(() =>
+        initialDraft?.history && initialDraft.history.length > 1
+            ? Math.min(initialDraft.historyIndex, initialDraft.history.length - 1)
+            : 0
+    );
 
     const AUTO_SAVE_INTERVAL = 30000; // 30 seconds
 
@@ -214,31 +221,36 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageBase64, mimeType, initia
         return () => { allBlobUrlsRef.current.forEach(url => URL.revokeObjectURL(url)); };
     }, []);
 
-    const handleSaveDraftInternal = useCallback((isAuto: boolean = false) => {
-        if (onSaveDraft) {
-            if (isAuto) setIsAutoSaving(true);
-            
+    const handleSaveDraftInternal = useCallback(async (isAuto: boolean = false) => {
+        if (!onSaveDraft) return;
+        if (isAuto) setIsAutoSaving(true);
+
+        const DRAFT_HISTORY_CAP = 5;
+        try {
+            const start = Math.max(0, historyIndex - DRAFT_HISTORY_CAP + 1);
+            const slicedHistory = history.slice(start, historyIndex + 1);
+            const historyBase64 = await Promise.all(slicedHistory.map(url => blobUrlToB64(url)));
+            const newHistoryIndex = historyBase64.length - 1;
+
             const draft: ImageDraftState = {
                 currentImage,
-                history: [currentImage],
-                historyIndex: 0,
+                history: historyBase64,
+                historyIndex: newHistoryIndex,
                 maskDataUrl: hasMask ? canvasRef.current?.toDataURL() : undefined,
-                timestamp: Date.now()
+                timestamp: Date.now(),
             };
-            
-            try {
-                onSaveDraft(draft);
-                setLastSavedTime(draft.timestamp);
-                if (!isAuto) {
-                    setIsDraftSaved(true);
-                    setTimeout(() => setIsDraftSaved(false), 2000);
-                }
-            } catch (e) {
-                console.error("Failed to save draft:", e);
-                if (!isAuto) setError("Local storage limit reached. Try clearing some drafts.");
-            } finally {
-                if (isAuto) setTimeout(() => setIsAutoSaving(false), 1000);
+
+            onSaveDraft(draft);
+            setLastSavedTime(draft.timestamp);
+            if (!isAuto) {
+                setIsDraftSaved(true);
+                setTimeout(() => setIsDraftSaved(false), 2000);
             }
+        } catch (e) {
+            console.error("Failed to save draft:", e);
+            if (!isAuto) setError("Local storage limit reached. Try clearing some drafts.");
+        } finally {
+            if (isAuto) setTimeout(() => setIsAutoSaving(false), 1000);
         }
     }, [onSaveDraft, currentImage, history, historyIndex, hasMask]);
 

@@ -151,9 +151,11 @@ const ImageAnalyzer: React.FC = () => {
 
     const handleGeneratePrompt = async (id: string) => {
         const item = items.find(i => i.id === id); if (!item) return;
-        setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: 'prompt', error: null } : i));
-        try { setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, promptResult: null } : i)); const result = await generateImagePrompt(await getBase64FromItem(item), item.file.type); setItems(prev => prev.map(i => i.id === id ? { ...i, promptResult: result } : i)); }
-        catch (err) { setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, error: err instanceof Error ? err.message : 'Failed to generate prompt.' } : i)); }
+        setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: 'prompt', promptResult: null, error: null } : i));
+        try {
+            const result = await generateImagePrompt(await getBase64FromItem(item), item.file.type);
+            setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, promptResult: result } : i));
+        } catch (err) { setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: null, error: err instanceof Error ? err.message : 'Failed to generate prompt.' } : i)); }
     };
 
     const handleClassifyStyle = async (id: string) => {
