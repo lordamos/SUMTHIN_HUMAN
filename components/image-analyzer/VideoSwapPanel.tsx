@@ -28,6 +28,7 @@ const VideoSwapPanel: React.FC = () => {
     const [videoMode, setVideoMode] = useState<'video' | 'live'>('video');
     const [jobStats, setJobStats] = useState<JobStats | null>(null);
     const statsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
 
     const fetchStats = async () => {
         try {
@@ -40,18 +41,18 @@ const VideoSwapPanel: React.FC = () => {
 
     useEffect(() => {
         fetchStats();
-        statsIntervalRef.current = setInterval(fetchStats, 30_000);
+        const interval = isProcessing ? 1_000 : 30_000;
+        statsIntervalRef.current = setInterval(fetchStats, interval);
         return () => {
             if (statsIntervalRef.current !== null) clearInterval(statsIntervalRef.current);
         };
-    }, []);
+    }, [isProcessing]);
 
     const [videoFile, setVideoFile] = useState<File | null>(null);
     const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
     const [videoDuration, setVideoDuration] = useState<number | null>(null);
     const [faceFile, setFaceFile] = useState<File | null>(null);
     const [facePreview, setFacePreview] = useState<string | null>(null);
-    const [isProcessing, setIsProcessing] = useState(false);
     const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
     const [videoError, setVideoError] = useState<string | null>(null);
 
