@@ -6,6 +6,8 @@ const VideoSwapPanel: React.FC = () => {
     const [videoMode, setVideoMode] = useState<'video' | 'live'>('video');
 
     const [videoFile, setVideoFile] = useState<File | null>(null);
+    const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
+    const [videoDuration, setVideoDuration] = useState<number | null>(null);
     const [faceFile, setFaceFile] = useState<File | null>(null);
     const [facePreview, setFacePreview] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -96,8 +98,53 @@ const VideoSwapPanel: React.FC = () => {
         const file = e.target.files?.[0];
         if (!file) return;
         setVideoFile(file);
+        setVideoThumbnail(null);
+        setVideoDuration(null);
         setDownloadUrl(null);
         e.target.value = '';
+
+        const url = URL.createObjectURL(file);
+        const vid = document.createElement('video');
+        vid.preload = 'metadata';
+        vid.muted = true;
+        vid.src = url;
+
+        let captured = false;
+        let urlRevoked = false;
+
+        const cleanup = () => {
+            if (!urlRevoked) {
+                urlRevoked = true;
+                URL.revokeObjectURL(url);
+            }
+        };
+
+        const captureFrame = () => {
+            if (captured) return;
+            captured = true;
+            const canvas = document.createElement('canvas');
+            canvas.width = vid.videoWidth || 320;
+            canvas.height = vid.videoHeight || 180;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
+                setVideoThumbnail(canvas.toDataURL('image/jpeg', 0.7));
+            }
+            cleanup();
+        };
+
+        vid.addEventListener('loadedmetadata', () => {
+            setVideoDuration(vid.duration);
+            // Seek to a small positive offset to ensure 'seeked' fires in all browsers
+            vid.currentTime = Math.min(0.1, vid.duration / 2);
+        });
+
+        vid.addEventListener('seeked', captureFrame, { once: true });
+
+        // Fallback: capture on loadeddata in case seeked does not fire
+        vid.addEventListener('loadeddata', captureFrame, { once: true });
+
+        vid.addEventListener('error', cleanup, { once: true });
     };
 
     const handleSubmitVideo = async () => {
@@ -177,6 +224,14 @@ const VideoSwapPanel: React.FC = () => {
 
     const pct = Math.round(progress * 100);
 
+    const formatDuration = (seconds: number) => {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        return `${m}:${String(s).padStart(2, '0')}`;
+    };
+
     return (
         <div className="space-y-5">
             <div className="flex rounded-xl overflow-hidden border border-white/10 bg-black/30">
@@ -201,11 +256,26 @@ const VideoSwapPanel: React.FC = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div
                             onClick={() => !isProcessing && videoInputRef.current?.click()}
-                            className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 border-dashed border-white/10 bg-black/20 transition-all min-h-[120px] ${isProcessing ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:border-emerald-400/60 hover:bg-black/30'}`}
+                            className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 border-dashed border-white/10 bg-black/20 transition-all min-h-[120px] relative overflow-hidden ${isProcessing ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:border-emerald-400/60 hover:bg-black/30'}`}
                         >
                             <input ref={videoInputRef} type="file" className="hidden" accept="video/*" onChange={handleVideoSelect} />
-                            <span className="text-2xl">🎬</span>
-                            <span className="text-xs font-bold text-gray-400">{videoFile ? videoFile.name : 'Select video'}</span>
+                            {videoThumbnail ? (
+                                <div className="relative w-full">
+                                    <img
+                                        src={videoThumbnail}
+                                        alt="Video preview"
+                                        className="w-full h-24 object-cover rounded-xl border border-emerald-400/30"
+                                    />
+                                    {videoDuration !== null && (
+                                        <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/70 text-[10px] font-mono text-white font-bold">
+                                            {formatDuration(videoDuration)}
+                                        </span>
+                                    )}
+                                </div>
+                            ) : (
+                                <span className="text-2xl">🎬</span>
+                            )}
+                            <span className="text-xs font-bold text-gray-400 truncate max-w-full px-1">{videoFile ? videoFile.name : 'Select video'}</span>
                             {videoFile && <span className="text-[10px] text-emerald-400 font-bold">✓ Ready</span>}
                         </div>
 
