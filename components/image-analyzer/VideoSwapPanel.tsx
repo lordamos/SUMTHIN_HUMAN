@@ -270,6 +270,9 @@ const VideoSwapPanel: React.FC = () => {
 
     const pct = Math.round(progress * 100);
 
+    const LONG_VIDEO_THRESHOLD_SECONDS = 5 * 60;
+    const isLongVideo = videoDuration !== null && videoDuration > LONG_VIDEO_THRESHOLD_SECONDS;
+
     const formatDuration = (seconds: number) => {
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
@@ -368,6 +371,15 @@ const VideoSwapPanel: React.FC = () => {
                             {faceFile && <span className="text-[10px] text-pink-400 font-bold">✓ Ready</span>}
                         </div>
                     </div>
+
+                    {isLongVideo && (
+                        <div className="px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-start gap-2">
+                            <span className="mt-0.5 flex-shrink-0">⚠️</span>
+                            <span>
+                                This video is <span className="font-bold">{formatDuration(videoDuration!)}</span> long. Processing may take a while — you can still proceed, but expect a longer wait.
+                            </span>
+                        </div>
+                    )}
 
                     {videoError && (
                         <div className="px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-400">{videoError}</div>
