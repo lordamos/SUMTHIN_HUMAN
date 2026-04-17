@@ -133,9 +133,9 @@ def delete_stale_jobs(cutoff: float) -> list:
             ).fetchall()
             stale = [dict(r) for r in rows]
             if stale:
-                placeholders = ",".join("?" * len(stale))
+                placeholders = ",".join(["?"] * len(stale))
                 conn.execute(
-                    f"DELETE FROM video_jobs WHERE job_id IN ({placeholders})",
+                    "DELETE FROM video_jobs WHERE job_id IN (" + placeholders + ")",
                     [r["job_id"] for r in stale],
                 )
                 conn.commit()
