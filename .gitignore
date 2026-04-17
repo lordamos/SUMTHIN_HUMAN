@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Video job persistence (generated at runtime)
+backend/video_jobs.db
+backend/video_outputs/
