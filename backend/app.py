@@ -597,9 +597,24 @@ import threading
 import time
 import job_store
 
-# In-memory session store: token -> numpy BGR image
-# Entries expire when the server restarts; fine for dev/live use
+# In-memory session store: token -> {"src_face": ..., "created_at": float}
+# Sessions are evicted after _WEBCAM_SESSION_TTL seconds of inactivity.
+_WEBCAM_SESSION_TTL = 300  # 5 minutes
 _webcam_sessions: dict = {}
+
+
+def _evict_webcam_sessions():
+    """Background loop that removes sessions older than _WEBCAM_SESSION_TTL."""
+    while True:
+        import time as _time
+        _time.sleep(60)
+        cutoff = _time.time() - _WEBCAM_SESSION_TTL
+        stale = [t for t, v in list(_webcam_sessions.items()) if v.get("last_used", 0) < cutoff]
+        for t in stale:
+            _webcam_sessions.pop(t, None)
+
+
+threading.Thread(target=_evict_webcam_sessions, daemon=True).start()
 
 # ---------------------------------------------------------------------------
 # Video job store
@@ -908,7 +923,7 @@ def webcam_swap_session():
         src_face = faces[0]
 
         token = uuid.uuid4().hex
-        _webcam_sessions[token] = {"src_face": src_face}
+        _webcam_sessions[token] = {"src_face": src_face, "last_used": time.time()}
         return jsonify({"session": token})
 
     except Exception as e:
@@ -932,7 +947,9 @@ def webcam_swap_frame():
         if not token or token not in _webcam_sessions:
             return jsonify({"error": "Invalid or expired session token."}), 400
 
-        src_face = _webcam_sessions[token]["src_face"]
+        session_data = _webcam_sessions[token]
+        session_data["last_used"] = time.time()
+        src_face = session_data["src_face"]
 
         frame_file = request.files.get("frame")
         if not frame_file:
@@ -951,6 +968,17 @@ def webcam_swap_frame():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/webcam-swap/session", methods=["DELETE"])
+def webcam_swap_session_delete():
+    """
+    Explicitly expire a live session when the user stops streaming.
+    Query param: session — token to remove
+    """
+    token = request.args.get("session", "")
+    _webcam_sessions.pop(token, None)
+    return jsonify({"ok": True})
 
 
 @app.route("/video-jobs/stats", methods=["GET"])

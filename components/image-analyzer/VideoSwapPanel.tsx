@@ -393,7 +393,10 @@ const VideoSwapPanel: React.FC = () => {
             URL.revokeObjectURL(liveResultRef.current.src);
             liveResultRef.current.src = '';
         }
-        liveSessionRef.current = null;
+        if (liveSessionRef.current) {
+            fetch(`/webcam-swap/session?session=${liveSessionRef.current}`, { method: 'DELETE' }).catch(() => {});
+            liveSessionRef.current = null;
+        }
     };
 
     const handleLiveFaceSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -408,6 +411,9 @@ const VideoSwapPanel: React.FC = () => {
     };
 
     const startCaptureLoop = (session: string) => {
+        let consecutiveErrors = 0;
+        const MAX_CONSECUTIVE_ERRORS = 8;
+
         const loop = async () => {
             if (!liveActiveRef.current) return;
             const video = liveVideoRef.current;
@@ -430,8 +436,19 @@ const VideoSwapPanel: React.FC = () => {
                         const oldSrc = liveResultRef.current.src;
                         liveResultRef.current.src = URL.createObjectURL(resultBlob);
                         if (oldSrc && oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
+                        consecutiveErrors = 0;
+                    } else if (!res.ok) {
+                        consecutiveErrors++;
                     }
-                } catch { /* network error — skip frame */ }
+                } catch {
+                    consecutiveErrors++;
+                }
+                if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+                    stopLiveStream();
+                    setLiveActive(false);
+                    setLiveError('Lost connection to the server. Please try restarting the live stream.');
+                    return;
+                }
                 if (liveActiveRef.current) liveLoopRef.current = setTimeout(loop, 0);
             }, 'image/jpeg', 0.8);
         };
@@ -473,8 +490,9 @@ const VideoSwapPanel: React.FC = () => {
             setLiveActive(true);
             startCaptureLoop(session);
         } catch (err) {
+            const name = err instanceof DOMException ? err.name : '';
             const msg = err instanceof Error ? err.message : 'Failed to start live stream.';
-            if (/permission|denied|notallowed|not allowed/i.test(msg)) {
+            if (name === 'NotAllowedError' || name === 'PermissionDeniedError' || /permission|denied|notallowed|not allowed/i.test(msg)) {
                 setLiveError('Camera access denied. Please allow camera access in your browser and try again.');
             } else {
                 setLiveError(msg);
