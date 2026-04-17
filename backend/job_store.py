@@ -73,14 +73,19 @@ def update_job(job_id: str, **fields) -> None:
     updates = {k: v for k, v in fields.items() if k in allowed}
     if not updates:
         return
-    set_clause = ", ".join(f"{k} = ?" for k in updates)
-    values = list(updates.values()) + [job_id]
+    # Column names are interpolated (SQL identifiers cannot be parameterised),
+    # but they are strictly filtered to the hardcoded `allowed` set above, so
+    # no user-supplied input can reach the query string.  Values are always
+    # passed as named parameters and never interpolated.
+    set_clause = ", ".join(f"{k} = :{k}" for k in updates)
+    params = dict(updates)
+    params["job_id"] = job_id
     with _lock:
         conn = _connect()
         try:
             conn.execute(
-                f"UPDATE video_jobs SET {set_clause} WHERE job_id = ?",
-                values,
+                f"UPDATE video_jobs SET {set_clause} WHERE job_id = :job_id",
+                params,
             )
             conn.commit()
         finally:
