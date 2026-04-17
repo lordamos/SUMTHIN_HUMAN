@@ -622,6 +622,14 @@ os.makedirs(_VIDEO_OUTPUT_DIR, exist_ok=True)
 _VIDEO_JOB_TTL = int(os.getenv("VIDEO_JOB_TTL", "3600"))
 # How often (seconds) the cleanup sweep runs.
 _VIDEO_JOB_SWEEP_INTERVAL = 60
+# Maximum total bytes allowed across all output files.
+# Set VIDEO_JOB_MAX_BYTES=0 to disable the cap.  Default: 2 GiB.
+_VIDEO_JOB_MAX_BYTES = int(os.getenv("VIDEO_JOB_MAX_BYTES", str(2 * 1024 * 1024 * 1024)))
+if _VIDEO_JOB_MAX_BYTES < 0:
+    raise ValueError(
+        f"VIDEO_JOB_MAX_BYTES must be >= 0 (got {_VIDEO_JOB_MAX_BYTES}). "
+        "Set it to 0 to disable the disk cap."
+    )
 
 # ---------------------------------------------------------------------------
 # Startup: initialise DB, reload persisted jobs, and clean up orphaned files
@@ -706,35 +714,79 @@ def _startup_restore_jobs() -> None:
 _startup_restore_jobs()
 
 
+def _evict_job(job_id: str, row: dict | None = None, delete_from_db: bool = True) -> None:
+    """Remove a single job from memory, disk, and optionally SQLite.
+
+    Pass delete_from_db=False when the caller has already removed the row from
+    the database (e.g. via job_store.delete_stale_jobs) to avoid a redundant
+    DELETE round-trip.
+    """
+    job = _video_jobs.pop(job_id, None)
+    cancel_event = (job or {}).get("cancel_event")
+    if cancel_event is not None:
+        cancel_event.set()
+    output_path = (
+        (row or {}).get("output_path")
+        or (job or {}).get("output_path")
+    )
+    if output_path and os.path.exists(output_path):
+        try:
+            os.remove(output_path)
+        except Exception:
+            pass
+    if delete_from_db:
+        job_store.delete_job(job_id)
+
+
 def _cleanup_video_jobs() -> None:
     """Background daemon that purges abandoned jobs older than _VIDEO_JOB_TTL.
 
     Staleness is measured from last_polled_at so that actively-watched
     long-running jobs are never evicted mid-processing.
+
+    Additionally, if _VIDEO_JOB_MAX_BYTES > 0 and total output-file disk usage
+    exceeds that cap, the oldest completed ("done") jobs are evicted first until
+    usage drops below the cap.
     """
     while True:
         time.sleep(_VIDEO_JOB_SWEEP_INTERVAL)
         cutoff = time.time() - _VIDEO_JOB_TTL
 
-        # Atomically remove stale rows from SQLite and get what was deleted.
+        # --- TTL-based eviction ---
+        # delete_stale_jobs already removes rows from SQLite, so we skip the
+        # redundant DB delete inside _evict_job.
         stale_rows = job_store.delete_stale_jobs(cutoff)
-
         for row in stale_rows:
             jid = row["job_id"]
-            job = _video_jobs.pop(jid, None)
+            _evict_job(jid, row, delete_from_db=False)
 
-            # Signal any still-running thread to stop
-            cancel_event = (job or {}).get("cancel_event")
-            if cancel_event is not None:
-                cancel_event.set()
+        # --- Cap-based eviction (oldest done jobs first) ---
+        if _VIDEO_JOB_MAX_BYTES > 0:
+            # Gather (job_id, created_at, file_size) for all jobs with output files.
+            sized: list = []
+            total_bytes = 0
+            for jid, job in list(_video_jobs.items()):
+                output_path = job.get("output_path")
+                if output_path and os.path.exists(output_path):
+                    try:
+                        sz = os.path.getsize(output_path)
+                    except OSError:
+                        sz = 0
+                    total_bytes += sz
+                    sized.append((jid, job.get("created_at", 0), sz, job.get("status")))
 
-            # Delete any output file left on disk (prefer row's path over memory)
-            output_path = row.get("output_path") or (job or {}).get("output_path")
-            if output_path and os.path.exists(output_path):
-                try:
-                    os.remove(output_path)
-                except Exception:
-                    pass
+            if total_bytes > _VIDEO_JOB_MAX_BYTES:
+                # Sort by created_at ascending (oldest first); only evict done jobs
+                # so we don't interrupt active processing.
+                done_jobs = sorted(
+                    [(jid, ca, sz) for jid, ca, sz, st in sized if st == "done"],
+                    key=lambda x: x[1],
+                )
+                for jid, _ca, sz in done_jobs:
+                    if total_bytes <= _VIDEO_JOB_MAX_BYTES:
+                        break
+                    _evict_job(jid)
+                    total_bytes -= sz
 
 
 _cleanup_thread = threading.Thread(target=_cleanup_video_jobs, daemon=True)
@@ -921,6 +973,7 @@ def video_jobs_stats():
         "output_bytes": total_bytes,
         "oldest_job_age_seconds": round(oldest_age, 1) if oldest_age is not None else None,
         "ttl_seconds": _VIDEO_JOB_TTL,
+        "max_bytes": _VIDEO_JOB_MAX_BYTES,
     })
 
 
