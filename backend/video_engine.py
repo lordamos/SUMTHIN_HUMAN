@@ -10,6 +10,8 @@ import cv2
 import numpy as np
 import os
 import tempfile
+import threading
+from typing import Callable, Optional
 
 import face_engine
 
@@ -34,11 +36,19 @@ def swap_face_on_frame(frame_bgr: np.ndarray, src_face) -> np.ndarray:
 # Video face swap — main entry point
 # ---------------------------------------------------------------------------
 
-def process_video(video_path: str, source_img: np.ndarray,
-                  output_path: str = None) -> str:
+def process_video(
+    video_path: str,
+    source_img: np.ndarray,
+    output_path: str = None,
+    progress_callback: Optional[Callable[[int, int], None]] = None,
+    cancel_event: Optional[threading.Event] = None,
+) -> str:
     """
     Process every frame of video_path, swap faces, write to output_path.
-    Returns the output file path.
+    Returns the output file path, or None if cancelled.
+
+    progress_callback(frame_num, total_frames) is called after each frame.
+    cancel_event, when set, causes processing to stop early.
     """
     if not face_engine.init():
         raise RuntimeError("InsightFace not available.")
@@ -58,6 +68,7 @@ def process_video(video_path: str, source_img: np.ndarray,
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
 
     if output_path is None:
         tmp = tempfile.NamedTemporaryFile(suffix=".mp4", delete=False)
@@ -67,16 +78,42 @@ def process_video(video_path: str, source_img: np.ndarray,
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
+    cancelled = False
+    frame_num = 0
     try:
         while True:
+            if cancel_event is not None and cancel_event.is_set():
+                cancelled = True
+                break
             ret, frame = cap.read()
             if not ret:
                 break
             swapped = swap_face_on_frame(frame, src_face)
             writer.write(swapped)
+            frame_num += 1
+            if progress_callback is not None:
+                progress_callback(frame_num, total_frames)
     finally:
         cap.release()
         writer.release()
+
+    if cancelled:
+        # Remove partial output file
+        try:
+            if os.path.exists(output_path):
+                os.remove(output_path)
+        except Exception:
+            pass
+        return None
+
+    # Skip re-encode if cancel was requested while frames were still writing
+    if cancel_event is not None and cancel_event.is_set():
+        try:
+            if os.path.exists(output_path):
+                os.remove(output_path)
+        except Exception:
+            pass
+        return None
 
     # Re-encode with ffmpeg via moviepy to ensure browser-compatible H.264
     try:
@@ -87,6 +124,16 @@ def process_video(video_path: str, source_img: np.ndarray,
                              logger=None, preset="ultrafast")
         clip.close()
         os.remove(output_path)
+
+        # If cancel was signalled during re-encode, delete the finished file
+        if cancel_event is not None and cancel_event.is_set():
+            try:
+                if os.path.exists(final_path):
+                    os.remove(final_path)
+            except Exception:
+                pass
+            return None
+
         return final_path
     except Exception:
         return output_path

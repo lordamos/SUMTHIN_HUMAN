@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import Spinner from '../Spinner';
 
@@ -12,6 +12,12 @@ const VideoSwapPanel: React.FC = () => {
     const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
     const [videoError, setVideoError] = useState<string | null>(null);
 
+    const [jobId, setJobId] = useState<string | null>(null);
+    const [progress, setProgress] = useState(0);
+    const [frameInfo, setFrameInfo] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+
+    const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
     const videoInputRef = useRef<HTMLInputElement>(null);
     const faceInputRef = useRef<HTMLInputElement>(null);
 
@@ -20,6 +26,62 @@ const VideoSwapPanel: React.FC = () => {
     const [liveFacePreview, setLiveFacePreview] = useState<string | null>(null);
     const [liveStreamUrl, setLiveStreamUrl] = useState<string | null>(null);
     const liveFaceInputRef = useRef<HTMLInputElement>(null);
+
+    const stopPolling = () => {
+        if (pollRef.current !== null) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+        }
+    };
+
+    useEffect(() => {
+        return () => stopPolling();
+    }, []);
+
+    const startPolling = (id: string) => {
+        stopPolling();
+        pollRef.current = setInterval(async () => {
+            try {
+                const res = await fetch(`/video-progress/${id}`);
+                if (!res.ok) return;
+                const data = await res.json();
+
+                setProgress(data.progress ?? 0);
+                setFrameInfo({ current: data.frame ?? 0, total: data.total ?? 0 });
+
+                if (data.status === 'done') {
+                    stopPolling();
+                    setIsProcessing(false);
+                    setJobId(null);
+                    // Fetch the result video
+                    try {
+                        const resultRes = await fetch(`/video-result/${id}`);
+                        if (!resultRes.ok) {
+                            const errData = await resultRes.json().catch(() => ({}));
+                            throw new Error(errData.error || 'Failed to fetch result.');
+                        }
+                        const blob = await resultRes.blob();
+                        setDownloadUrl(URL.createObjectURL(blob));
+                    } catch (err) {
+                        setVideoError(err instanceof Error ? err.message : 'Could not retrieve result video.');
+                    }
+                } else if (data.status === 'cancelled') {
+                    stopPolling();
+                    setIsProcessing(false);
+                    setJobId(null);
+                    setProgress(0);
+                    setFrameInfo({ current: 0, total: 0 });
+                } else if (data.status === 'error') {
+                    stopPolling();
+                    setIsProcessing(false);
+                    setJobId(null);
+                    setVideoError(data.error || 'Processing failed.');
+                }
+            } catch {
+                // Transient network error — keep polling
+            }
+        }, 1000);
+    };
 
     const handleFaceSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -46,6 +108,9 @@ const VideoSwapPanel: React.FC = () => {
         setIsProcessing(true);
         setVideoError(null);
         setDownloadUrl(null);
+        setProgress(0);
+        setFrameInfo({ current: 0, total: 0 });
+
         try {
             const formData = new FormData();
             formData.append('video', videoFile);
@@ -55,14 +120,26 @@ const VideoSwapPanel: React.FC = () => {
                 const data = await res.json().catch(() => ({}));
                 throw new Error(data.error || `Server error ${res.status}`);
             }
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            setDownloadUrl(url);
+            const { job_id } = await res.json();
+            setJobId(job_id);
+            startPolling(job_id);
         } catch (err) {
             setVideoError(err instanceof Error ? err.message : 'Video face swap failed.');
-        } finally {
             setIsProcessing(false);
         }
+    };
+
+    const handleCancel = (cancelledJobId?: string) => {
+        const id = cancelledJobId ?? jobId;
+        if (!id) return;
+        // Stop polling and reset UI immediately — don't wait for the backend
+        stopPolling();
+        setIsProcessing(false);
+        setJobId(null);
+        setProgress(0);
+        setFrameInfo({ current: 0, total: 0 });
+        // Fire-and-forget cancel request to stop the backend job
+        fetch(`/video-cancel/${id}`, { method: 'DELETE' }).catch(() => {});
     };
 
     const handleLiveFaceSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,6 +175,8 @@ const VideoSwapPanel: React.FC = () => {
         setLiveStreamUrl(null);
     };
 
+    const pct = Math.round(progress * 100);
+
     return (
         <div className="space-y-5">
             <div className="flex rounded-xl overflow-hidden border border-white/10 bg-black/30">
@@ -121,8 +200,8 @@ const VideoSwapPanel: React.FC = () => {
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div
-                            onClick={() => videoInputRef.current?.click()}
-                            className="flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 border-dashed border-white/10 bg-black/20 cursor-pointer hover:border-emerald-400/60 hover:bg-black/30 transition-all min-h-[120px]"
+                            onClick={() => !isProcessing && videoInputRef.current?.click()}
+                            className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 border-dashed border-white/10 bg-black/20 transition-all min-h-[120px] ${isProcessing ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:border-emerald-400/60 hover:bg-black/30'}`}
                         >
                             <input ref={videoInputRef} type="file" className="hidden" accept="video/*" onChange={handleVideoSelect} />
                             <span className="text-2xl">🎬</span>
@@ -131,8 +210,8 @@ const VideoSwapPanel: React.FC = () => {
                         </div>
 
                         <div
-                            onClick={() => faceInputRef.current?.click()}
-                            className="flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 border-dashed border-white/10 bg-black/20 cursor-pointer hover:border-pink-400/60 hover:bg-black/30 transition-all min-h-[120px] relative overflow-hidden"
+                            onClick={() => !isProcessing && faceInputRef.current?.click()}
+                            className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 border-dashed border-white/10 bg-black/20 transition-all min-h-[120px] relative overflow-hidden ${isProcessing ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:border-pink-400/60 hover:bg-black/30'}`}
                         >
                             <input ref={faceInputRef} type="file" className="hidden" accept="image/*" onChange={handleFaceSelect} />
                             {facePreview ? (
@@ -149,14 +228,56 @@ const VideoSwapPanel: React.FC = () => {
                         <div className="px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-400">{videoError}</div>
                     )}
 
-                    <button
-                        onClick={handleSubmitVideo}
-                        disabled={isProcessing || !videoFile || !faceFile}
-                        className="w-full py-3 rounded-xl text-sm font-black border border-emerald-500/40 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
-                        style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(6,182,212,0.12))' }}
-                    >
-                        {isProcessing ? <><Spinner /> Processing video...</> : '🚀 Swap Faces in Video'}
-                    </button>
+                    {/* Progress bar — shown during processing */}
+                    {isProcessing && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="space-y-2"
+                        >
+                            <div className="flex items-center justify-between text-xs text-gray-400">
+                                <span className="flex items-center gap-1.5">
+                                    <Spinner />
+                                    Processing…
+                                </span>
+                                <span className="font-mono text-emerald-300 font-bold">
+                                    {pct}%
+                                    {frameInfo.total > 0 && (
+                                        <span className="text-gray-500 font-normal ml-1">
+                                            — frame {frameInfo.current} / {frameInfo.total}
+                                        </span>
+                                    )}
+                                </span>
+                            </div>
+                            <div className="w-full h-2 rounded-full bg-white/5 overflow-hidden">
+                                <motion.div
+                                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400"
+                                    style={{ width: `${pct}%` }}
+                                    transition={{ ease: 'linear', duration: 0.4 }}
+                                />
+                            </div>
+                        </motion.div>
+                    )}
+
+                    <div className="flex gap-3">
+                        <button
+                            onClick={handleSubmitVideo}
+                            disabled={isProcessing || !videoFile || !faceFile}
+                            className="flex-1 py-3 rounded-xl text-sm font-black border border-emerald-500/40 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
+                            style={{ background: 'linear-gradient(135deg, rgba(16,185,129,0.2), rgba(6,182,212,0.12))' }}
+                        >
+                            {isProcessing ? 'Processing…' : '🚀 Swap Faces in Video'}
+                        </button>
+
+                        {isProcessing && (
+                            <button
+                                onClick={() => handleCancel()}
+                                className="px-4 py-3 rounded-xl text-sm font-black border border-red-500/40 bg-red-500/15 text-red-400 hover:bg-red-500/25 transition-all flex items-center gap-2"
+                            >
+                                ✕ Cancel
+                            </button>
+                        )}
+                    </div>
 
                     {downloadUrl && (
                         <motion.a

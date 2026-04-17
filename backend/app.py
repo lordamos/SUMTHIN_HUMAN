@@ -418,14 +418,13 @@ def health():
 @app.route("/video-face-swap", methods=["POST"])
 def video_face_swap_route():
     """
+    Start a video face-swap job.
     Accept multipart/form-data with:
       - 'video': the video file
       - 'face': the source face image
-    Returns the processed .mp4 file as a download.
+    Returns {job_id} immediately; use /video-progress/<id> to poll.
     """
     try:
-        from video_engine import process_video
-
         if "video" not in request.files or "face" not in request.files:
             return jsonify({"error": "Missing 'video' or 'face' file."}), 400
 
@@ -446,32 +445,87 @@ def video_face_swap_route():
             os.remove(tmp_video.name)
             return jsonify({"error": "Could not decode face image."}), 400
 
-        # Process
-        output_path = process_video(tmp_video.name, source_img)
-        os.remove(tmp_video.name)
+        job_id = uuid.uuid4().hex
+        cancel_event = threading.Event()
+        _video_jobs[job_id] = {
+            "status": "running",
+            "progress": 0.0,
+            "frame": 0,
+            "total": 0,
+            "output_path": None,
+            "cancel_event": cancel_event,
+            "error": None,
+        }
 
-        # Clean up output file after the response is sent
-        from flask import after_this_request
-
-        @after_this_request
-        def _cleanup_video(response):
-            try:
-                if os.path.exists(output_path):
-                    os.remove(output_path)
-            except Exception:
-                pass
-            return response
-
-        return send_file(
-            output_path,
-            mimetype="video/mp4",
-            as_attachment=True,
-            download_name="face_swapped.mp4"
+        t = threading.Thread(
+            target=_run_video_job,
+            args=(job_id, tmp_video.name, source_img),
+            daemon=True,
         )
-    except RuntimeError as e:
-        return jsonify({"error": str(e)}), 422
+        t.start()
+
+        return jsonify({"job_id": job_id})
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/video-progress/<job_id>", methods=["GET"])
+def video_progress_route(job_id: str):
+    """Return {status, progress, frame, total} for a video job."""
+    job = _video_jobs.get(job_id)
+    if job is None:
+        return jsonify({"error": "Job not found."}), 404
+    return jsonify({
+        "status": job["status"],
+        "progress": job["progress"],
+        "frame": job["frame"],
+        "total": job["total"],
+        "error": job.get("error"),
+    })
+
+
+@app.route("/video-cancel/<job_id>", methods=["DELETE"])
+def video_cancel_route(job_id: str):
+    """Cancel a running video job."""
+    job = _video_jobs.get(job_id)
+    if job is None:
+        return jsonify({"error": "Job not found."}), 404
+    job["cancel_event"].set()
+    return jsonify({"ok": True})
+
+
+@app.route("/video-result/<job_id>", methods=["GET"])
+def video_result_route(job_id: str):
+    """Return the processed video file for a completed job."""
+    job = _video_jobs.get(job_id)
+    if job is None:
+        return jsonify({"error": "Job not found."}), 404
+    if job["status"] != "done":
+        return jsonify({"error": "Job not complete.", "status": job["status"]}), 400
+
+    output_path = job.get("output_path")
+    if not output_path or not os.path.exists(output_path):
+        return jsonify({"error": "Result file not found."}), 404
+
+    from flask import after_this_request
+
+    @after_this_request
+    def _cleanup(response):
+        try:
+            if os.path.exists(output_path):
+                os.remove(output_path)
+        except Exception:
+            pass
+        _video_jobs.pop(job_id, None)
+        return response
+
+    return send_file(
+        output_path,
+        mimetype="video/mp4",
+        as_attachment=True,
+        download_name="face_swapped.mp4"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -481,10 +535,72 @@ def video_face_swap_route():
 # ---------------------------------------------------------------------------
 
 import uuid
+import threading
 
 # In-memory session store: token -> numpy BGR image
 # Entries expire when the server restarts; fine for dev/live use
 _webcam_sessions: dict = {}
+
+# ---------------------------------------------------------------------------
+# Video job store
+# ---------------------------------------------------------------------------
+# Each job: {status, progress, frame, total, output_path, cancel_event, error}
+_video_jobs: dict = {}
+
+
+def _run_video_job(job_id: str, video_path: str, source_img) -> None:
+    """Background thread target for video face swap jobs."""
+    from video_engine import process_video
+    job = _video_jobs[job_id]
+    cancel_event: threading.Event = job["cancel_event"]
+
+    def on_progress(frame_num: int, total_frames: int):
+        job["frame"] = frame_num
+        job["total"] = total_frames
+        job["progress"] = (frame_num / total_frames) if total_frames > 0 else 0.0
+
+    try:
+        output_path = process_video(
+            video_path,
+            source_img,
+            progress_callback=on_progress,
+            cancel_event=cancel_event,
+        )
+        if cancel_event.is_set() or output_path is None:
+            job["status"] = "cancelled"
+            # Ensure any leftover output file is removed
+            if output_path and os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except Exception:
+                    pass
+            # Evict cancelled job from store after a brief delay so one final
+            # poll can read the status (frontend stops polling immediately on
+            # cancel, but belt-and-suspenders)
+            def _evict():
+                import time
+                time.sleep(5)
+                _video_jobs.pop(job_id, None)
+            threading.Thread(target=_evict, daemon=True).start()
+        else:
+            job["output_path"] = output_path
+            job["status"] = "done"
+            job["progress"] = 1.0
+    except Exception as exc:
+        job["status"] = "error"
+        job["error"] = str(exc)
+        # Evict error jobs after a brief window
+        def _evict_err():
+            import time
+            time.sleep(30)
+            _video_jobs.pop(job_id, None)
+        threading.Thread(target=_evict_err, daemon=True).start()
+    finally:
+        try:
+            if os.path.exists(video_path):
+                os.remove(video_path)
+        except Exception:
+            pass
 
 
 @app.route("/webcam-swap/session", methods=["POST"])
