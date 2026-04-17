@@ -13,7 +13,13 @@ import threading
 import time
 from typing import Optional
 
-_DB_PATH = os.path.join(os.path.dirname(__file__), "video_jobs.db")
+_DB_PATH = os.path.abspath(
+    os.getenv("VIDEO_JOBS_DB", "")
+    or os.path.join(os.path.expanduser("~"), "video_data", "video_jobs.db")
+)
+_db_parent = os.path.dirname(_DB_PATH)
+if _db_parent:
+    os.makedirs(_db_parent, exist_ok=True)
 _lock = threading.Lock()
 
 

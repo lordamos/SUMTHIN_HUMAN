@@ -564,7 +564,10 @@ _webcam_sessions: dict = {}
 _video_jobs: dict = {}
 
 # Dedicated directory for video output files so we can detect orphans on startup.
-_VIDEO_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "video_outputs")
+_VIDEO_OUTPUT_DIR = os.path.abspath(
+    os.getenv("VIDEO_OUTPUT_DIR", "")
+    or os.path.join(os.path.expanduser("~"), "video_data", "video_outputs")
+)
 os.makedirs(_VIDEO_OUTPUT_DIR, exist_ok=True)
 
 # How long (seconds) before an undownloaded job is considered abandoned.
