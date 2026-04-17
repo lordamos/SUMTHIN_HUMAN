@@ -42,12 +42,18 @@ def process_video(
     output_path: str = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
     cancel_event: Optional[threading.Event] = None,
+    frame_skip: int = 1,
 ) -> str:
     """
     Process every frame of video_path, swap faces, write to output_path.
     Returns the output file path, or None if cancelled.
 
-    progress_callback(frame_num, total_frames) is called after each frame.
+    frame_skip: run face detection + swap every `frame_skip` frames; frames
+    in between reuse the last swapped result.  frame_skip=1 means every frame
+    is processed (original behaviour); frame_skip=2 halves the work, etc.
+
+    progress_callback(frame_num, total_frames) is called after every frame
+    written, regardless of whether that frame was swapped or reused.
     cancel_event, when set, causes processing to stop early.
     """
     if not face_engine.init():
@@ -78,8 +84,12 @@ def process_video(
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
 
+    # Clamp to a sane range so misconfiguration can't produce a broken video.
+    frame_skip = max(1, int(frame_skip))
+
     cancelled = False
     frame_num = 0
+    last_swapped: Optional[np.ndarray] = None
     try:
         while True:
             if cancel_event is not None and cancel_event.is_set():
@@ -88,8 +98,13 @@ def process_video(
             ret, frame = cap.read()
             if not ret:
                 break
-            swapped = swap_face_on_frame(frame, src_face)
-            writer.write(swapped)
+
+            # Process this frame if it falls on a swap boundary; otherwise
+            # reuse the previous result so face-less frames still look swapped.
+            if (frame_num % frame_skip) == 0:
+                last_swapped = swap_face_on_frame(frame, src_face)
+
+            writer.write(last_swapped if last_swapped is not None else frame)
             frame_num += 1
             if progress_callback is not None:
                 progress_callback(frame_num, total_frames)

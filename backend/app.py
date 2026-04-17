@@ -512,7 +512,7 @@ def video_face_swap_route():
 
         t = threading.Thread(
             target=_run_video_job,
-            args=(job_id, tmp_video.name, source_img, pre_output_path),
+            args=(job_id, tmp_video.name, source_img, pre_output_path, _VIDEO_FRAME_SKIP),
             daemon=True,
         )
         t.start()
@@ -630,6 +630,11 @@ if _VIDEO_JOB_MAX_BYTES < 0:
         f"VIDEO_JOB_MAX_BYTES must be >= 0 (got {_VIDEO_JOB_MAX_BYTES}). "
         "Set it to 0 to disable the disk cap."
     )
+# How many frames to skip between face-swap operations.
+# frame_skip=1 → every frame processed (slowest, highest quality).
+# frame_skip=2 → every other frame processed (~2× faster).
+# frame_skip=4 → every 4th frame processed (~4× faster, slight motion blur on skipped frames).
+_VIDEO_FRAME_SKIP = max(1, int(os.getenv("VIDEO_FRAME_SKIP", "2")))
 
 # ---------------------------------------------------------------------------
 # Startup: initialise DB, reload persisted jobs, and clean up orphaned files
@@ -793,7 +798,8 @@ _cleanup_thread = threading.Thread(target=_cleanup_video_jobs, daemon=True)
 _cleanup_thread.start()
 
 
-def _run_video_job(job_id: str, video_path: str, source_img, pre_output_path: str) -> None:
+def _run_video_job(job_id: str, video_path: str, source_img, pre_output_path: str,
+                   frame_skip: int = 1) -> None:
     """Background thread target for video face swap jobs."""
     from video_engine import process_video
     job = _video_jobs[job_id]
@@ -811,6 +817,7 @@ def _run_video_job(job_id: str, video_path: str, source_img, pre_output_path: st
             output_path=pre_output_path,
             progress_callback=on_progress,
             cancel_event=cancel_event,
+            frame_skip=frame_skip,
         )
         if cancel_event.is_set() or output_path is None:
             job["status"] = "cancelled"
