@@ -60,7 +60,7 @@ const ImageAnalyzer: React.FC = () => {
         });
         setItems(prev => [...prev, ...newItems]);
         setGlobalError(null);
-        setTimeout(() => { newItems.forEach(item => processItem(item.id, 'analyze')); }, 200);
+        newItems.forEach(item => processItem(item.id, 'analyze'));
     };
 
     const handleDrag = (e: React.DragEvent) => {
@@ -115,9 +115,14 @@ const ImageAnalyzer: React.FC = () => {
     };
 
     const processItem = async (id: string, action: 'analyze' | 'describe' | 'tag' | 'color') => {
-        setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: action, error: null } : i));
+        let snapshot: BatchItem | undefined;
+        setItems(prev => {
+            const found = prev.find(i => i.id === id);
+            if (found) snapshot = found;
+            return prev.map(i => i.id === id ? { ...i, loadingAction: action, error: null } : i);
+        });
         try {
-            const item = items.find(i => i.id === id);
+            const item = snapshot;
             if (!item) return;
             const base64Image = await getBase64FromItem(item);
             const mimeType = item.file.type;
@@ -135,9 +140,12 @@ const ImageAnalyzer: React.FC = () => {
     const processBatch = async (action: 'analyze' | 'describe' | 'tag' | 'color') => { await Promise.all(items.map(item => processItem(item.id, action))); };
 
     const processSmartAnalysis = async (id: string) => {
-        const item = items.find(i => i.id === id);
+        let item: BatchItem | undefined;
+        setItems(prev => {
+            item = prev.find(i => i.id === id);
+            return prev.map(i => i.id === id ? { ...i, loadingAction: 'smart', error: null } : i);
+        });
         if (!item) return;
-        setItems(prev => prev.map(i => i.id === id ? { ...i, loadingAction: 'smart', error: null } : i));
         try {
             const base64Image = await getBase64FromItem(item);
             const mimeType = item.file.type;
