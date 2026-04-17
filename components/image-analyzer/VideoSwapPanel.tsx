@@ -70,6 +70,109 @@ const VideoSwapPanel: React.FC = () => {
     const [liveStreamUrl, setLiveStreamUrl] = useState<string | null>(null);
     const liveFaceInputRef = useRef<HTMLInputElement>(null);
 
+    // Job lookup state
+    const [lookupOpen, setLookupOpen] = useState(false);
+    const [lookupInput, setLookupInput] = useState('');
+    const [lookupStatus, setLookupStatus] = useState<'idle' | 'loading' | 'done' | 'running' | 'error' | 'cancelled' | 'not_found'>('idle');
+    const [lookupDownloadUrl, setLookupDownloadUrl] = useState<string | null>(null);
+    const [lookupError, setLookupError] = useState<string | null>(null);
+    const [lookupProgress, setLookupProgress] = useState(0);
+    const [lookupFrameInfo, setLookupFrameInfo] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+    const lookupPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const lookupBlobUrlRef = useRef<string | null>(null);
+
+    const stopLookupPolling = () => {
+        if (lookupPollRef.current !== null) {
+            clearInterval(lookupPollRef.current);
+            lookupPollRef.current = null;
+        }
+    };
+
+    const setLookupBlobUrl = (url: string | null) => {
+        if (lookupBlobUrlRef.current) {
+            URL.revokeObjectURL(lookupBlobUrlRef.current);
+        }
+        lookupBlobUrlRef.current = url;
+        setLookupDownloadUrl(url);
+    };
+
+    useEffect(() => {
+        return () => {
+            stopLookupPolling();
+            if (lookupBlobUrlRef.current) URL.revokeObjectURL(lookupBlobUrlRef.current);
+        };
+    }, []);
+
+    const startLookupPolling = (id: string) => {
+        stopLookupPolling();
+        lookupPollRef.current = setInterval(async () => {
+            try {
+                const res = await fetch(`/video-progress/${id}`);
+                if (!res.ok) { stopLookupPolling(); setLookupStatus('not_found'); return; }
+                const data = await res.json();
+                setLookupProgress(data.progress ?? 0);
+                setLookupFrameInfo({ current: data.frame ?? 0, total: data.total ?? 0 });
+                if (data.status === 'done') {
+                    stopLookupPolling();
+                    setLookupStatus('done');
+                    try {
+                        const resultRes = await fetch(`/video-result/${id}`);
+                        if (!resultRes.ok) throw new Error('Failed to fetch result.');
+                        const blob = await resultRes.blob();
+                        setLookupBlobUrl(URL.createObjectURL(blob));
+                    } catch {
+                        setLookupStatus('error');
+                        setLookupError('Job finished but could not retrieve the file.');
+                    }
+                } else if (data.status === 'error') {
+                    stopLookupPolling();
+                    setLookupStatus('error');
+                    setLookupError(data.error || 'Processing failed.');
+                } else if (data.status === 'cancelled') {
+                    stopLookupPolling();
+                    setLookupStatus('cancelled');
+                }
+            } catch { /* transient network error — keep polling */ }
+        }, 1500);
+    };
+
+    const handleLookup = async () => {
+        const id = lookupInput.trim();
+        if (!id) return;
+        stopLookupPolling();
+        setLookupStatus('loading');
+        setLookupBlobUrl(null);
+        setLookupError(null);
+        setLookupProgress(0);
+        setLookupFrameInfo({ current: 0, total: 0 });
+        try {
+            const res = await fetch(`/video-progress/${id}`);
+            if (!res.ok) { setLookupStatus('not_found'); return; }
+            const data = await res.json();
+            setLookupProgress(data.progress ?? 0);
+            setLookupFrameInfo({ current: data.frame ?? 0, total: data.total ?? 0 });
+            if (data.status === 'done') {
+                setLookupStatus('done');
+                const resultRes = await fetch(`/video-result/${id}`);
+                if (!resultRes.ok) { setLookupStatus('error'); setLookupError('Job finished but file could not be retrieved.'); return; }
+                const blob = await resultRes.blob();
+                setLookupBlobUrl(URL.createObjectURL(blob));
+            } else if (data.status === 'running' || data.status === 'queued') {
+                setLookupStatus('running');
+                startLookupPolling(id);
+            } else if (data.status === 'error') {
+                setLookupStatus('error');
+                setLookupError(data.error || 'Processing failed.');
+            } else if (data.status === 'cancelled') {
+                setLookupStatus('cancelled');
+            } else {
+                setLookupStatus('not_found');
+            }
+        } catch {
+            setLookupStatus('not_found');
+        }
+    };
+
     const stopPolling = () => {
         if (pollRef.current !== null) {
             clearInterval(pollRef.current);
@@ -413,6 +516,19 @@ const VideoSwapPanel: React.FC = () => {
                                     transition={{ ease: 'linear', duration: 0.4 }}
                                 />
                             </div>
+                            {jobId && (
+                                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/8">
+                                    <span className="text-[10px] text-gray-500 shrink-0">Job ID</span>
+                                    <span className="flex-1 font-mono text-[10px] text-gray-300 truncate">{jobId}</span>
+                                    <button
+                                        onClick={() => navigator.clipboard.writeText(jobId)}
+                                        className="text-[10px] text-gray-500 hover:text-gray-200 transition-colors shrink-0"
+                                        title="Copy job ID"
+                                    >
+                                        Copy
+                                    </button>
+                                </div>
+                            )}
                         </motion.div>
                     )}
 
@@ -447,6 +563,90 @@ const VideoSwapPanel: React.FC = () => {
                             ⬇️ Download Face-Swapped Video
                         </motion.a>
                     )}
+
+                    {/* Job lookup — retrieve a previous result by ID */}
+                    <div className="rounded-xl border border-white/8 bg-black/20 overflow-hidden">
+                        <button
+                            onClick={() => {
+                                setLookupOpen(o => !o);
+                                if (lookupOpen) { stopLookupPolling(); setLookupStatus('idle'); setLookupInput(''); setLookupBlobUrl(null); setLookupError(null); }
+                            }}
+                            className="w-full flex items-center justify-between px-3 py-2.5 text-xs font-bold text-gray-400 hover:text-gray-200 transition-colors"
+                        >
+                            <span>🔍 Retrieve a previous job</span>
+                            <span className="text-gray-600">{lookupOpen ? '▲' : '▼'}</span>
+                        </button>
+
+                        {lookupOpen && (
+                            <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="px-3 pb-3 space-y-2.5"
+                            >
+                                <p className="text-[10px] text-gray-500">Paste your job ID below to check the status or download your result.</p>
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        value={lookupInput}
+                                        onChange={e => setLookupInput(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && handleLookup()}
+                                        placeholder="e.g. abc123..."
+                                        className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-emerald-500/50"
+                                    />
+                                    <button
+                                        onClick={handleLookup}
+                                        disabled={!lookupInput.trim() || lookupStatus === 'loading'}
+                                        className="px-3 py-2 rounded-lg text-xs font-black border border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 transition-all disabled:opacity-40"
+                                    >
+                                        {lookupStatus === 'loading' ? '…' : 'Check'}
+                                    </button>
+                                </div>
+
+                                {lookupStatus === 'running' && (
+                                    <div className="space-y-1.5">
+                                        <div className="flex items-center justify-between text-[10px] text-gray-400">
+                                            <span className="flex items-center gap-1"><Spinner />Still processing…</span>
+                                            <span className="font-mono text-emerald-300">{Math.round(lookupProgress * 100)}%{lookupFrameInfo.total > 0 && <span className="text-gray-500"> — {lookupFrameInfo.current}/{lookupFrameInfo.total}</span>}</span>
+                                        </div>
+                                        <div className="w-full h-1.5 rounded-full bg-white/5 overflow-hidden">
+                                            <motion.div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400" style={{ width: `${Math.round(lookupProgress * 100)}%` }} transition={{ ease: 'linear', duration: 0.4 }} />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {lookupStatus === 'done' && lookupDownloadUrl && (
+                                    <motion.a
+                                        initial={{ opacity: 0, scale: 0.95 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        href={lookupDownloadUrl}
+                                        download="face_swapped.mp4"
+                                        className="block w-full py-2.5 rounded-xl text-xs font-black text-center border border-teal-400/50 bg-teal-500/20 text-teal-300 hover:bg-teal-500/30 transition-all"
+                                    >
+                                        ⬇️ Download Face-Swapped Video
+                                    </motion.a>
+                                )}
+
+                                {lookupStatus === 'error' && (
+                                    <div className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-[10px] text-red-400">
+                                        {lookupError || 'This job encountered an error.'}
+                                    </div>
+                                )}
+
+                                {lookupStatus === 'cancelled' && (
+                                    <div className="px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-[10px] text-yellow-400">
+                                        This job was cancelled.
+                                    </div>
+                                )}
+
+                                {lookupStatus === 'not_found' && (
+                                    <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-[10px] text-gray-400">
+                                        No job found with that ID. It may have expired or the ID is incorrect.
+                                    </div>
+                                )}
+                            </motion.div>
+                        )}
+                    </div>
                 </motion.div>
             )}
 
