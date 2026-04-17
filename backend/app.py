@@ -447,6 +447,9 @@ def video_face_swap_route():
 
         job_id = uuid.uuid4().hex
         cancel_event = threading.Event()
+        now = time.time()
+        # Pre-assign a stable output path inside our dedicated directory.
+        pre_output_path = os.path.join(_VIDEO_OUTPUT_DIR, f"{job_id}.mp4")
         _video_jobs[job_id] = {
             "status": "running",
             "progress": 0.0,
@@ -455,13 +458,14 @@ def video_face_swap_route():
             "output_path": None,
             "cancel_event": cancel_event,
             "error": None,
-            "created_at": time.time(),
-            "last_polled_at": time.time(),
+            "created_at": now,
+            "last_polled_at": now,
         }
+        job_store.insert_job(job_id, now, output_path=pre_output_path)
 
         t = threading.Thread(
             target=_run_video_job,
-            args=(job_id, tmp_video.name, source_img),
+            args=(job_id, tmp_video.name, source_img, pre_output_path),
             daemon=True,
         )
         t.start()
@@ -478,7 +482,9 @@ def video_progress_route(job_id: str):
     job = _video_jobs.get(job_id)
     if job is None:
         return jsonify({"error": "Job not found."}), 404
-    job["last_polled_at"] = time.time()
+    now = time.time()
+    job["last_polled_at"] = now
+    job_store.update_job(job_id, last_polled_at=now)
     return jsonify({
         "status": job["status"],
         "progress": job["progress"],
@@ -495,6 +501,7 @@ def video_cancel_route(job_id: str):
     if job is None:
         return jsonify({"error": "Job not found."}), 404
     job["cancel_event"].set()
+    job_store.update_job(job_id, status="cancelled")
     return jsonify({"ok": True})
 
 
@@ -521,6 +528,7 @@ def video_result_route(job_id: str):
         except Exception:
             pass
         _video_jobs.pop(job_id, None)
+        job_store.delete_job(job_id)
         return response
 
     return send_file(
@@ -540,6 +548,7 @@ def video_result_route(job_id: str):
 import uuid
 import threading
 import time
+import job_store
 
 # In-memory session store: token -> numpy BGR image
 # Entries expire when the server restarts; fine for dev/live use
@@ -549,14 +558,102 @@ _webcam_sessions: dict = {}
 # Video job store
 # ---------------------------------------------------------------------------
 # Each job: {status, progress, frame, total, output_path, cancel_event, error,
-#            created_at}
+#            created_at, last_polled_at}
+# Persistent fields (status, output_path, error, created_at, last_polled_at)
+# are mirrored to SQLite via job_store so they survive a server restart.
 _video_jobs: dict = {}
+
+# Dedicated directory for video output files so we can detect orphans on startup.
+_VIDEO_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "video_outputs")
+os.makedirs(_VIDEO_OUTPUT_DIR, exist_ok=True)
 
 # How long (seconds) before an undownloaded job is considered abandoned.
 # Override via the VIDEO_JOB_TTL env var (default: 3600 = 1 hour).
 _VIDEO_JOB_TTL = int(os.getenv("VIDEO_JOB_TTL", "3600"))
 # How often (seconds) the cleanup sweep runs.
 _VIDEO_JOB_SWEEP_INTERVAL = 60
+
+# ---------------------------------------------------------------------------
+# Startup: initialise DB, reload persisted jobs, and clean up orphaned files
+# ---------------------------------------------------------------------------
+
+job_store.init_db()
+
+def _startup_restore_jobs() -> None:
+    """
+    Called once at startup to:
+    1. Reload persisted job records into the in-memory dict.
+    2. For "running" jobs, check whether the output file was actually written
+       before the crash.  If found, promote to "done"; otherwise mark "error".
+    3. Verify "done" jobs still have their output file on disk.
+    4. Delete output files that have no matching job record (orphaned by crash).
+    """
+    rows = job_store.load_all_jobs()
+    known_output_paths: set = set()
+
+    for row in rows:
+        jid = row["job_id"]
+        status = row["status"]
+        output_path = row.get("output_path")
+
+        if status == "running":
+            # The server restarted mid-job.  Check whether the processing
+            # actually finished before the crash by looking for the output file.
+            # process_video writes a _final.mp4 (normal path) or falls back to
+            # the raw output_path when moviepy is unavailable.
+            actual_path = None
+            if output_path:
+                final_candidate = output_path.replace(".mp4", "_final.mp4")
+                if os.path.exists(final_candidate):
+                    actual_path = final_candidate
+                elif os.path.exists(output_path):
+                    actual_path = output_path
+
+            if actual_path:
+                # Processing completed right before the crash — recover as done.
+                status = "done"
+                output_path = actual_path
+                job_store.update_job(jid, status="done", output_path=actual_path)
+            else:
+                status = "error"
+                output_path = None
+                job_store.update_job(jid, status="error", error="Server restarted while job was running.")
+
+        # If a "done" job's output file was lost, demote it to error.
+        if status == "done" and output_path and not os.path.exists(output_path):
+            status = "error"
+            job_store.update_job(jid, status="error", error="Output file missing after restart.")
+            output_path = None
+
+        if output_path:
+            known_output_paths.add(os.path.abspath(output_path))
+
+        _video_jobs[jid] = {
+            "status": status,
+            "progress": 1.0 if status == "done" else 0.0,
+            "frame": 0,
+            "total": 0,
+            "output_path": output_path,
+            "cancel_event": threading.Event(),
+            "error": row.get("error"),
+            "created_at": row["created_at"],
+            "last_polled_at": row["last_polled_at"],
+        }
+
+    # Scan the output directory for files not referenced by any job record.
+    try:
+        for fname in os.listdir(_VIDEO_OUTPUT_DIR):
+            fpath = os.path.abspath(os.path.join(_VIDEO_OUTPUT_DIR, fname))
+            if fpath not in known_output_paths:
+                try:
+                    os.remove(fpath)
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
+_startup_restore_jobs()
 
 
 def _cleanup_video_jobs() -> None:
@@ -568,18 +665,21 @@ def _cleanup_video_jobs() -> None:
     while True:
         time.sleep(_VIDEO_JOB_SWEEP_INTERVAL)
         cutoff = time.time() - _VIDEO_JOB_TTL
-        stale = [jid for jid, job in list(_video_jobs.items())
-                 if job.get("last_polled_at", job.get("created_at", 0)) < cutoff]
-        for jid in stale:
+
+        # Atomically remove stale rows from SQLite and get what was deleted.
+        stale_rows = job_store.delete_stale_jobs(cutoff)
+
+        for row in stale_rows:
+            jid = row["job_id"]
             job = _video_jobs.pop(jid, None)
-            if job is None:
-                continue
+
             # Signal any still-running thread to stop
-            cancel_event = job.get("cancel_event")
+            cancel_event = (job or {}).get("cancel_event")
             if cancel_event is not None:
                 cancel_event.set()
-            # Delete any output file left on disk
-            output_path = job.get("output_path")
+
+            # Delete any output file left on disk (prefer row's path over memory)
+            output_path = row.get("output_path") or (job or {}).get("output_path")
             if output_path and os.path.exists(output_path):
                 try:
                     os.remove(output_path)
@@ -591,7 +691,7 @@ _cleanup_thread = threading.Thread(target=_cleanup_video_jobs, daemon=True)
 _cleanup_thread.start()
 
 
-def _run_video_job(job_id: str, video_path: str, source_img) -> None:
+def _run_video_job(job_id: str, video_path: str, source_img, pre_output_path: str) -> None:
     """Background thread target for video face swap jobs."""
     from video_engine import process_video
     job = _video_jobs[job_id]
@@ -606,11 +706,13 @@ def _run_video_job(job_id: str, video_path: str, source_img) -> None:
         output_path = process_video(
             video_path,
             source_img,
+            output_path=pre_output_path,
             progress_callback=on_progress,
             cancel_event=cancel_event,
         )
         if cancel_event.is_set() or output_path is None:
             job["status"] = "cancelled"
+            job_store.update_job(job_id, status="cancelled")
             # Ensure any leftover output file is removed
             if output_path and os.path.exists(output_path):
                 try:
@@ -624,19 +726,23 @@ def _run_video_job(job_id: str, video_path: str, source_img) -> None:
                 import time
                 time.sleep(5)
                 _video_jobs.pop(job_id, None)
+                job_store.delete_job(job_id)
             threading.Thread(target=_evict, daemon=True).start()
         else:
             job["output_path"] = output_path
             job["status"] = "done"
             job["progress"] = 1.0
+            job_store.update_job(job_id, status="done", output_path=output_path)
     except Exception as exc:
         job["status"] = "error"
         job["error"] = str(exc)
+        job_store.update_job(job_id, status="error", error=str(exc))
         # Evict error jobs after a brief window
         def _evict_err():
             import time
             time.sleep(30)
             _video_jobs.pop(job_id, None)
+            job_store.delete_job(job_id)
         threading.Thread(target=_evict_err, daemon=True).start()
     finally:
         try:

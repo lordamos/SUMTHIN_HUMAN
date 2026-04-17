@@ -118,9 +118,9 @@ def process_video(
     # Re-encode with ffmpeg via moviepy to ensure browser-compatible H.264
     try:
         from moviepy import VideoFileClip
-        final_path = output_path.replace(".mp4", "_final.mp4")
+        silent_path = output_path.replace(".mp4", "_silent.mp4")
         clip = VideoFileClip(output_path)
-        clip.write_videofile(final_path, codec="libx264", audio=False,
+        clip.write_videofile(silent_path, codec="libx264", audio=False,
                              logger=None, preset="ultrafast")
         clip.close()
         os.remove(output_path)
@@ -128,11 +128,42 @@ def process_video(
         # If cancel was signalled during re-encode, delete the finished file
         if cancel_event is not None and cancel_event.is_set():
             try:
-                if os.path.exists(final_path):
-                    os.remove(final_path)
+                if os.path.exists(silent_path):
+                    os.remove(silent_path)
             except Exception:
                 pass
             return None
+
+        # Mux audio from the original video into the re-encoded output.
+        # Falls back to the silent file if the original has no audio track or
+        # if ffmpeg is unavailable.
+        final_path = output_path.replace(".mp4", "_final.mp4")
+        try:
+            import subprocess
+            result = subprocess.run(
+                [
+                    "ffmpeg", "-y",
+                    "-i", silent_path,   # processed video (no audio)
+                    "-i", video_path,    # original upload (audio source)
+                    "-c:v", "copy",
+                    "-c:a", "aac",
+                    "-map", "0:v:0",
+                    "-map", "1:a:0",
+                    "-shortest",
+                    final_path,
+                ],
+                capture_output=True,
+                timeout=120,
+            )
+            if result.returncode == 0 and os.path.exists(final_path):
+                os.remove(silent_path)
+            else:
+                # Original had no audio or ffmpeg failed — use the silent file
+                os.rename(silent_path, final_path)
+        except Exception:
+            # ffmpeg not available or timed out — use the silent file
+            if os.path.exists(silent_path):
+                os.rename(silent_path, final_path)
 
         return final_path
     except Exception:
