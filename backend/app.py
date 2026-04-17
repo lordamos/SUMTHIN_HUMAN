@@ -869,7 +869,8 @@ def _run_video_job(job_id: str, video_path: str, source_img, pre_output_path: st
 def webcam_swap_session():
     """
     Accept a face image as multipart/form-data or JSON base64.
-    Returns a short-lived session token.
+    Pre-computes the source face embedding and stores it in the session so
+    that each subsequent /webcam-swap/frame call doesn't redo detection.
 
     Accepts:
       - multipart/form-data with field 'face' (file upload)
@@ -897,47 +898,57 @@ def webcam_swap_session():
         if source_img is None:
             return jsonify({"error": "Could not decode face image."}), 400
 
+        if not face_engine.init():
+            return jsonify({"error": "Face swap model not ready."}), 503
+
+        face_app = face_engine.get_face_app()
+        faces = face_app.get(source_img) if face_app else []
+        if not faces:
+            return jsonify({"error": "No face detected in the source image."}), 422
+        src_face = faces[0]
+
         token = uuid.uuid4().hex
-        _webcam_sessions[token] = source_img
+        _webcam_sessions[token] = {"src_face": src_face}
         return jsonify({"session": token})
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/webcam-swap", methods=["GET"])
-def webcam_swap_route():
+@app.route("/webcam-swap/frame", methods=["POST"])
+def webcam_swap_frame():
     """
-    Streams a multipart/x-mixed-replace JPEG stream from the webcam
-    with InsightFace face swap applied.
+    Accept a single JPEG frame from the browser webcam and return the
+    face-swapped JPEG.
+
     Query param: session — token returned by POST /webcam-swap/session
+    Body: multipart/form-data with field 'frame' (JPEG image bytes)
     """
     try:
-        from video_engine import webcam_swap_frames
+        import cv2
+        from video_engine import swap_face_on_frame
 
         token = request.args.get("session", "")
         if not token or token not in _webcam_sessions:
             return jsonify({"error": "Invalid or expired session token."}), 400
 
-        source_img = _webcam_sessions[token]
+        src_face = _webcam_sessions[token]["src_face"]
 
-        def generate():
-            boundary = b"--frame\r\n"
-            header = b"Content-Type: image/jpeg\r\n\r\n"
-            try:
-                for jpeg_bytes in webcam_swap_frames(source_img, frame_skip=2,
-                                                      resize_w=640, resize_h=480):
-                    yield boundary + header + jpeg_bytes + b"\r\n"
-            finally:
-                # Clean up session after stream ends
-                _webcam_sessions.pop(token, None)
+        frame_file = request.files.get("frame")
+        if not frame_file:
+            return jsonify({"error": "Missing 'frame' field."}), 400
 
-        return Response(
-            generate(),
-            mimetype="multipart/x-mixed-replace; boundary=frame"
-        )
-    except RuntimeError as e:
-        return jsonify({"error": str(e)}), 422
+        frame_bytes = frame_file.read()
+        frame_arr = np.frombuffer(frame_bytes, dtype=np.uint8)
+        frame = cv2.imdecode(frame_arr, cv2.IMREAD_COLOR)
+        if frame is None:
+            return jsonify({"error": "Could not decode frame image."}), 400
+
+        result = swap_face_on_frame(frame, src_face)
+
+        _, buf = cv2.imencode(".jpg", result, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        return Response(buf.tobytes(), mimetype="image/jpeg")
+
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

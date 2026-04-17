@@ -68,8 +68,16 @@ const VideoSwapPanel: React.FC = () => {
     const [liveActive, setLiveActive] = useState(false);
     const [liveFaceFile, setLiveFaceFile] = useState<File | null>(null);
     const [liveFacePreview, setLiveFacePreview] = useState<string | null>(null);
-    const [liveStreamUrl, setLiveStreamUrl] = useState<string | null>(null);
+    const [liveError, setLiveError] = useState<string | null>(null);
     const liveFaceInputRef = useRef<HTMLInputElement>(null);
+
+    const liveVideoRef = useRef<HTMLVideoElement | null>(null);
+    const liveCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const liveResultRef = useRef<HTMLImageElement | null>(null);
+    const liveSessionRef = useRef<string | null>(null);
+    const liveActiveRef = useRef<boolean>(false);
+    const liveLoopRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const liveMediaStreamRef = useRef<MediaStream | null>(null);
 
     // Long-video warning threshold (seconds). null = disabled.
     const STORAGE_KEY_THRESHOLD = 'videoWarningThresholdSeconds';
@@ -129,6 +137,7 @@ const VideoSwapPanel: React.FC = () => {
         return () => {
             stopLookupPolling();
             if (lookupBlobUrlRef.current) URL.revokeObjectURL(lookupBlobUrlRef.current);
+            stopLiveStream();
         };
     }, []);
 
@@ -367,18 +376,71 @@ const VideoSwapPanel: React.FC = () => {
         fetchStats();
     };
 
+    const stopLiveStream = () => {
+        liveActiveRef.current = false;
+        if (liveLoopRef.current !== null) {
+            clearTimeout(liveLoopRef.current);
+            liveLoopRef.current = null;
+        }
+        if (liveMediaStreamRef.current) {
+            liveMediaStreamRef.current.getTracks().forEach(t => t.stop());
+            liveMediaStreamRef.current = null;
+        }
+        if (liveVideoRef.current) {
+            liveVideoRef.current.srcObject = null;
+        }
+        if (liveResultRef.current && liveResultRef.current.src.startsWith('blob:')) {
+            URL.revokeObjectURL(liveResultRef.current.src);
+            liveResultRef.current.src = '';
+        }
+        liveSessionRef.current = null;
+    };
+
     const handleLiveFaceSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
         setLiveFaceFile(file);
         setLiveFacePreview(URL.createObjectURL(file));
+        stopLiveStream();
         setLiveActive(false);
-        setLiveStreamUrl(null);
+        setLiveError(null);
         e.target.value = '';
+    };
+
+    const startCaptureLoop = (session: string) => {
+        const loop = async () => {
+            if (!liveActiveRef.current) return;
+            const video = liveVideoRef.current;
+            const canvas = liveCanvasRef.current;
+            if (!video || !canvas || video.readyState < 2) {
+                if (liveActiveRef.current) liveLoopRef.current = setTimeout(loop, 100);
+                return;
+            }
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(async (blob) => {
+                if (!blob || !liveActiveRef.current) return;
+                const fd = new FormData();
+                fd.append('frame', blob, 'frame.jpg');
+                try {
+                    const res = await fetch(`/webcam-swap/frame?session=${session}`, { method: 'POST', body: fd });
+                    if (res.ok && liveResultRef.current && liveActiveRef.current) {
+                        const resultBlob = await res.blob();
+                        const oldSrc = liveResultRef.current.src;
+                        liveResultRef.current.src = URL.createObjectURL(resultBlob);
+                        if (oldSrc && oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
+                    }
+                } catch { /* network error — skip frame */ }
+                if (liveActiveRef.current) liveLoopRef.current = setTimeout(loop, 0);
+            }, 'image/jpeg', 0.8);
+        };
+        loop();
     };
 
     const handleStartLive = async () => {
         if (!liveFaceFile) return;
+        setLiveError(null);
         try {
             const formData = new FormData();
             formData.append('face', liveFaceFile);
@@ -388,16 +450,43 @@ const VideoSwapPanel: React.FC = () => {
                 throw new Error(data.error || `Session error ${res.status}`);
             }
             const { session } = await res.json();
-            setLiveStreamUrl(`/webcam-swap?session=${session}`);
+            liveSessionRef.current = session;
+
+            const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+            liveMediaStreamRef.current = mediaStream;
+
+            if (liveVideoRef.current) {
+                liveVideoRef.current.srcObject = mediaStream;
+                await new Promise<void>(resolve => {
+                    const v = liveVideoRef.current!;
+                    v.onloadedmetadata = () => resolve();
+                });
+                await liveVideoRef.current.play();
+            }
+
+            if (liveCanvasRef.current && liveVideoRef.current) {
+                liveCanvasRef.current.width = liveVideoRef.current.videoWidth || 640;
+                liveCanvasRef.current.height = liveVideoRef.current.videoHeight || 480;
+            }
+
+            liveActiveRef.current = true;
             setLiveActive(true);
+            startCaptureLoop(session);
         } catch (err) {
-            console.error('Failed to start live session:', err);
+            const msg = err instanceof Error ? err.message : 'Failed to start live stream.';
+            if (/permission|denied|notallowed|not allowed/i.test(msg)) {
+                setLiveError('Camera access denied. Please allow camera access in your browser and try again.');
+            } else {
+                setLiveError(msg);
+            }
+            stopLiveStream();
         }
     };
 
     const handleStopLive = () => {
+        stopLiveStream();
         setLiveActive(false);
-        setLiveStreamUrl(null);
+        setLiveError(null);
     };
 
     const pct = Math.round(progress * 100);
@@ -756,6 +845,10 @@ const VideoSwapPanel: React.FC = () => {
                 <motion.div key="live-mode" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
                     <p className="text-xs text-gray-500 text-center">Stream your webcam feed with your face swapped in real time.</p>
 
+                    {/* Hidden elements used for frame capture */}
+                    <video ref={liveVideoRef} autoPlay playsInline muted className="hidden" />
+                    <canvas ref={liveCanvasRef} className="hidden" />
+
                     <div
                         onClick={() => liveFaceInputRef.current?.click()}
                         className="flex items-center gap-4 p-4 rounded-2xl border-2 border-dashed border-white/10 bg-black/20 cursor-pointer hover:border-rose-400/60 hover:bg-black/30 transition-all"
@@ -771,6 +864,12 @@ const VideoSwapPanel: React.FC = () => {
                             <p className="text-[10px] text-gray-500 mt-0.5">This face will replace yours in the live stream</p>
                         </div>
                     </div>
+
+                    {liveError && (
+                        <div className="px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-400">
+                            {liveError}
+                        </div>
+                    )}
 
                     <div className="flex gap-3">
                         <button
@@ -789,30 +888,22 @@ const VideoSwapPanel: React.FC = () => {
                         </button>
                     </div>
 
-                    {liveActive && liveStreamUrl && (
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.97 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="rounded-2xl overflow-hidden border border-rose-400/20 bg-black/40 relative"
-                        >
+                    <div className="rounded-2xl overflow-hidden border border-rose-400/20 bg-black/40 relative min-h-[200px] flex items-center justify-center">
+                        {liveActive && (
                             <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-500/80 text-white text-[9px] font-black uppercase tracking-wider">
                                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block"></span>
                                 LIVE
                             </div>
-                            <img
-                                src={liveStreamUrl}
-                                alt="Live webcam face swap"
-                                className="w-full rounded-2xl"
-                                onError={() => { setLiveActive(false); setLiveStreamUrl(null); }}
-                            />
-                        </motion.div>
-                    )}
-
-                    {!liveActive && (
-                        <div className="flex items-center justify-center py-8 rounded-2xl border border-dashed border-white/5 bg-black/20">
-                            <p className="text-xs text-gray-600">Live preview will appear here when streaming starts</p>
-                        </div>
-                    )}
+                        )}
+                        {!liveActive && (
+                            <p className="text-xs text-gray-600 py-8">Live preview will appear here when streaming starts</p>
+                        )}
+                        <img
+                            ref={liveResultRef}
+                            alt="Live webcam face swap"
+                            className={`w-full rounded-2xl ${liveActive ? '' : 'hidden'}`}
+                        />
+                    </div>
                 </motion.div>
             )}
         </div>
