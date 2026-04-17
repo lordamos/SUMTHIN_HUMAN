@@ -634,7 +634,11 @@ if _VIDEO_JOB_MAX_BYTES < 0:
 # frame_skip=1 → every frame processed (slowest, highest quality).
 # frame_skip=2 → every other frame processed (~2× faster).
 # frame_skip=4 → every 4th frame processed (~4× faster, slight motion blur on skipped frames).
-_VIDEO_FRAME_SKIP = max(1, int(os.getenv("VIDEO_FRAME_SKIP", "2")))
+try:
+    _VIDEO_FRAME_SKIP = max(1, int(os.getenv("VIDEO_FRAME_SKIP", "2")))
+except ValueError:
+    print("[config] VIDEO_FRAME_SKIP is not a valid integer — falling back to 2.")
+    _VIDEO_FRAME_SKIP = 2
 
 # ---------------------------------------------------------------------------
 # Startup: initialise DB, reload persisted jobs, and clean up orphaned files
@@ -799,7 +803,7 @@ _cleanup_thread.start()
 
 
 def _run_video_job(job_id: str, video_path: str, source_img, pre_output_path: str,
-                   frame_skip: int = 1) -> None:
+                   frame_skip: int = 2) -> None:
     """Background thread target for video face swap jobs."""
     from video_engine import process_video
     job = _video_jobs[job_id]

@@ -42,7 +42,7 @@ def process_video(
     output_path: str = None,
     progress_callback: Optional[Callable[[int, int], None]] = None,
     cancel_event: Optional[threading.Event] = None,
-    frame_skip: int = 1,
+    frame_skip: int = 2,
 ) -> str:
     """
     Process every frame of video_path, swap faces, write to output_path.
