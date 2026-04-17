@@ -406,6 +406,53 @@ def humanizer_page():
     return render_template("index.html")
 
 
+# ---------------------------------------------------------------------------
+# Admin / status dashboard — GET /admin
+# ---------------------------------------------------------------------------
+# Protect with a secret when ADMIN_SECRET env var is set.
+# Access via:  /admin?key=<secret>   or   HTTP Basic Auth (any user / secret)
+# ---------------------------------------------------------------------------
+
+_ADMIN_SECRET = os.getenv("ADMIN_SECRET", "")
+
+def _admin_authorized() -> bool:
+    """Return True if the request carries a valid admin credential."""
+    if not _ADMIN_SECRET:
+        return True
+
+    # 1. Query-string key
+    if request.args.get("key") == _ADMIN_SECRET:
+        return True
+
+    # 2. HTTP Basic Auth — accept any username, password == secret
+    auth = request.authorization
+    if auth and auth.password == _ADMIN_SECRET:
+        return True
+
+    return False
+
+
+@app.route("/admin")
+def admin_dashboard():
+    """Operator-facing status / resource-usage dashboard."""
+    if not _admin_authorized():
+        return Response(
+            "Unauthorized — provide ?key=<ADMIN_SECRET> or HTTP Basic Auth.",
+            status=401,
+            headers={"WWW-Authenticate": 'Basic realm="Admin Dashboard"'},
+        )
+    # Build the stats URL to embed in the page.
+    # If the operator supplied the key via query-string, append it so the
+    # JS fetch call also passes it.  If Basic Auth was used the browser will
+    # replay the credentials automatically for same-origin requests.
+    key_param = request.args.get("key", "")
+    stats_url = "/video-jobs/stats"
+    if key_param:
+        from urllib.parse import urlencode
+        stats_url += "?" + urlencode({"key": key_param})
+    return render_template("admin.html", stats_url=stats_url)
+
+
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "ok"})
@@ -834,7 +881,18 @@ def webcam_swap_route():
 
 @app.route("/video-jobs/stats", methods=["GET"])
 def video_jobs_stats():
-    """Return aggregate stats about current video jobs and disk usage."""
+    """Return aggregate stats about current video jobs and disk usage.
+
+    When ADMIN_SECRET is set, this endpoint requires the same credential as
+    the admin dashboard (query-param key or HTTP Basic Auth password) so that
+    raw stats are not publicly accessible.
+    """
+    if not _admin_authorized():
+        return Response(
+            "Unauthorized — provide ?key=<ADMIN_SECRET> or HTTP Basic Auth.",
+            status=401,
+            headers={"WWW-Authenticate": 'Basic realm="Admin Dashboard"'},
+        )
     counts: dict = {s: 0 for s in ("running", "done", "error", "cancelled")}
     total_bytes = 0
     oldest_age: float | None = None
