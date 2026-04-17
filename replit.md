@@ -9,7 +9,20 @@
   - **Video & Live Mode** — Video face swap + real-time webcam face swap
 - `components/TextAnalyzer.tsx` — Text humanizer + AI detection
 - `components/ImageEditor.tsx` — Magic editor (Gemini-powered)
-- `components/CloudPicker.tsx` — Google Drive / Dropbox import
+- `components/image-analyzer/` — Image sub-components:
+  - `BatchItemCard.tsx` — Per-image card (analysis, face/outfit swap, filters, studio)
+  - `VideoSwapPanel.tsx` — Video face swap + live webcam swap UI
+  - `ImageInspector.tsx` — Zoomable/pannable image viewer
+  - `DetailedAnalysisItem.tsx` — Expandable analysis result row
+  - `ColorPaletteView.tsx` — Dominant color swatches
+  - `TagsView.tsx` — Categorized tag chips
+  - `types.ts` — BatchItem, BatchItemCardProps, filter maps
+- `components/text-analyzer/` — Text sub-components:
+  - `AnalysisCard.tsx` — Per-snippet forensic reasoning + suggestions
+  - `CorrectedTextView.tsx` — Diff-highlighted humanized text
+  - `RephrasedGptResultsView.tsx` — List of GPT rephrase options
+  - `TTSButton.tsx` — Play/stop audio button
+  - `audioUtils.ts` — Base64 decode + PCM→AudioBuffer conversion
 - `services/geminiService.ts` — All Gemini API calls (analysis, edit, tags, prompts)
 
 ### Backend (Flask, port 8000)
@@ -31,7 +44,7 @@
 - Live webcam streaming with frame-skip (every 2nd frame) + 640×480 resize
 - Gemini image analysis, description, tag generation, style classification
 - Batch image processing, AI forensics scoring
-- Cloud import (Google Drive, Dropbox)
+- Cloud export (Google Drive, Dropbox) from image batch panel
 
 ## Dependencies
 ### Python

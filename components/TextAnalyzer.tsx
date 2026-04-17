@@ -2,20 +2,23 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Activity, User, BarChart2, ListTodo } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { analyzeText, improveText, humanizeText, predictNextText, generateSpeech } from '../services/geminiService';
-import type { TextAnalysisResult, TextAnalysisItem, WritingStyleProfile, HistoryItem, CloudFile, CloudProvider } from '../types';
+import type { TextAnalysisResult, TextAnalysisItem, WritingStyleProfile, HistoryItem } from '../types';
 import Gauge from './Gauge';
 import Spinner from './Spinner';
 import ErrorDisplay from './ErrorDisplay';
 import WritingStyleSetup from './WritingStyleSetup';
 import HistoryPanel from './HistoryPanel';
-import CloudPicker from './CloudPicker';
-import { 
-    ClipboardIcon, CheckIcon, GrammarIcon, ChevronDownIcon, 
-    ToneIcon, ShortenIcon, LengthenIcon, SimplifyIcon, FormalIcon, 
-    NormalIcon, ProfessionalIcon, ColloquialIcon, AcademicIcon, 
-    BusinessIcon, CreativeIcon, FriendlyIcon, RewordIcon, TextUploadIcon, 
-    ClearIcon, RephraseGptIcon, HumanizerIcon, PersonalizeIcon, HistoryIcon, ImplementIcon, ReadabilityIcon, DocumentIcon, SparklesIcon, SpeakerIcon, AudioWaveIcon, CloudIcon,
-    GoogleDriveIcon, DropboxIcon
+import { decodeBase64, decodeAudioData } from './text-analyzer/audioUtils';
+import TTSButton from './text-analyzer/TTSButton';
+import RephrasedGptResultsView from './text-analyzer/RephrasedGptResultsView';
+import CorrectedTextView from './text-analyzer/CorrectedTextView';
+import AnalysisCard from './text-analyzer/AnalysisCard';
+import {
+    ClipboardIcon, CheckIcon, GrammarIcon, ChevronDownIcon,
+    ToneIcon, ShortenIcon, LengthenIcon, SimplifyIcon, FormalIcon,
+    NormalIcon, ProfessionalIcon, ColloquialIcon, AcademicIcon,
+    BusinessIcon, CreativeIcon, FriendlyIcon, RewordIcon, TextUploadIcon,
+    ClearIcon, RephraseGptIcon, HumanizerIcon, PersonalizeIcon, HistoryIcon, ImplementIcon, ReadabilityIcon, DocumentIcon, SparklesIcon, SpeakerIcon, AudioWaveIcon,
 } from './Icons';
 
 type BatchResult = TextAnalysisResult & { fileName: string };
@@ -30,213 +33,6 @@ const improvementOptions = [
     { key: 'simplify', label: 'Simplify Language', icon: <SimplifyIcon /> },
     { key: 'readability', label: 'Improve Readability', icon: <ReadabilityIcon /> },
 ];
-
-function decodeBase64(base64: string) {
-  const binaryString = atob(base64);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return bytes;
-}
-
-async function decodeAudioData(
-  data: Uint8Array,
-  ctx: AudioContext,
-  sampleRate: number,
-  numChannels: number,
-): Promise<AudioBuffer> {
-  const dataInt16 = new Int16Array(data.buffer);
-  const frameCount = dataInt16.length / numChannels;
-  const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
-
-  for (let channel = 0; channel < numChannels; channel++) {
-    const channelData = buffer.getChannelData(channel);
-    for (let i = 0; i < frameCount; i++) {
-      channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
-    }
-  }
-  return buffer;
-}
-
-const TTSButton: React.FC<{ text: string; id: string; currentPlaying: string | null; onPlay: (text: string, id: string) => void; className?: string }> = ({ text, id, currentPlaying, onPlay, className }) => {
-    const isPlaying = currentPlaying === id;
-    const isGenerating = currentPlaying === `${id}-loading`;
-
-    return (
-        <button
-            onClick={() => onPlay(text, id)}
-            disabled={isGenerating && !isPlaying}
-            className={`p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-gray-400 hover:text-teal-300 transition-all ${className} ${isPlaying ? 'border-teal-500/30 bg-teal-500/10' : ''}`}
-            title="Read Aloud"
-        >
-            {isGenerating ? <Spinner /> : isPlaying ? <AudioWaveIcon /> : <SpeakerIcon className="w-3.5 h-3.5" />}
-        </button>
-    );
-};
-
-const RephrasedGptResultsView: React.FC<{ results: string[]; onTTS: (text: string, id: string) => void; currentAudio: string | null }> = ({ results, onTTS, currentAudio }) => {
-    const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
-
-    const handleCopy = (text: string, index: number) => {
-        navigator.clipboard.writeText(text).then(() => {
-            setCopiedIndex(index);
-            setTimeout(() => setCopiedIndex(null), 2000);
-        });
-    };
-
-    return (
-        <div className="space-y-4">
-            <h2 className="text-xl font-semibold text-gray-200">Rephrasing Suggestions</h2>
-            <div className="space-y-3">
-                {results.map((result, index) => (
-                    <motion.div 
-                        key={index} 
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.2, delay: index * 0.05 }}
-                        className="p-4 rounded-2xl bg-black/20 border border-white/10 flex justify-between items-center gap-4 hover:border-teal-400/30 transition-colors"
-                    >
-                        <p className="text-gray-200 whitespace-pre-wrap font-sans text-base leading-relaxed flex-1">
-                           <span className="font-bold text-teal-400 mr-2">{index + 1}.</span> {result}
-                        </p>
-                        <div className="flex gap-2 shrink-0">
-                            <TTSButton text={result} id={`rephrase-${index}`} currentPlaying={currentAudio} onPlay={onTTS} />
-                            <button
-                                onClick={() => handleCopy(result, index)}
-                                className="bg-white/5 hover:bg-white/10 border border-white/10 text-white font-semibold py-2 px-3 rounded-lg shadow-md transition-all duration-300 transform hover:-translate-y-0.5 flex items-center justify-center gap-2 text-sm"
-                            >
-                                <AnimatePresence mode="wait" initial={false}>
-                                    {copiedIndex === index ? (
-                                        <motion.span key="copied-rephrased" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.15 }}><CheckIcon /></motion.span>
-                                    ) : (
-                                        <motion.span key="copy-rephrased" initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={{ duration: 0.15 }}><ClipboardIcon /></motion.span>
-                                    )}
-                                </AnimatePresence>
-                            </button>
-                        </div>
-                    </motion.div>
-                ))}
-            </div>
-        </div>
-    );
-};
-
-function buildDiffHtml(original: string, modified: string): string {
-    const origSet = new Set(original.split(/\s+/));
-    return modified.split(' ').map(word => {
-        const clean = word.replace(/[^a-zA-Z0-9]/g, '');
-        if (clean && !origSet.has(word) && !origSet.has(clean)) {
-            return `<mark style="background:#0ea5e933;color:#7dd3fc;padding:1px 3px;border-radius:4px;border:1px solid #0ea5e955">${word}</mark>`;
-        }
-        return word;
-    }).join(' ');
-}
-
-const CorrectedTextView: React.FC<{ text: string; originalText?: string; onTTS: (text: string, id: string) => void; currentAudio: string | null }> = ({ text, originalText, onTTS, currentAudio }) => (
-    <motion.div 
-        initial={{ opacity: 0, y: 10 }} 
-        animate={{ opacity: 1, y: 0 }}
-        className="p-4 rounded-2xl bg-black/20 border border-white/10 hover:border-teal-400/30 transition-colors relative group"
-    >
-        <div className="absolute top-4 right-4">
-            <TTSButton text={text} id="humanized-main" currentPlaying={currentAudio} onPlay={onTTS} className="opacity-0 group-hover:opacity-100" />
-        </div>
-        {originalText ? (
-            <p
-                className="text-gray-200 whitespace-pre-wrap font-sans text-base leading-relaxed pr-12"
-                dangerouslySetInnerHTML={{ __html: buildDiffHtml(originalText, text) }}
-            />
-        ) : (
-            <pre className="text-gray-200 whitespace-pre-wrap font-sans text-base leading-relaxed pr-12">
-                {text}
-            </pre>
-        )}
-    </motion.div>
-);
-
-interface AnalysisCardProps {
-    item: TextAnalysisItem;
-    onImplementSuggestion: (original: string, suggestion: string) => void;
-    onTTS: (text: string, id: string) => void;
-    currentAudio: string | null;
-    cardIndex: number;
-}
-
-const AnalysisCard: React.FC<AnalysisCardProps> = ({ item, onImplementSuggestion, onTTS, currentAudio, cardIndex }) => {
-    const [copiedSuggestionIndex, setCopiedSuggestionIndex] = useState<number | null>(null);
-
-    const handleCopySuggestion = (suggestion: string, index: number) => {
-        navigator.clipboard.writeText(suggestion).then(() => {
-            setCopiedSuggestionIndex(index);
-            setTimeout(() => setCopiedSuggestionIndex(null), 2000);
-        });
-    };
-
-    return (
-        <div className="space-y-4">
-            <motion.div layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex justify-end">
-                <div className="max-w-[85%] p-3 rounded-2xl border bg-gradient-to-br from-amber-900/10 to-amber-700/5 border-amber-400/10">
-                    <div className="text-sm text-amber-200">{item.originalText}</div>
-                    <div className="text-[10px] text-gray-400 mt-1 text-right">Original Text</div>
-                </div>
-            </motion.div>
-            <motion.div layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start">
-                <div className="max-w-[85%] p-3 rounded-2xl border bg-gradient-to-br from-teal-900/30 to-teal-700/10 border-teal-400/20 space-y-3 relative overflow-hidden">
-                    <div className="flex justify-between items-start">
-                         <div className="flex-1">
-                            <h4 className="font-semibold text-teal-300 text-xs mb-1 flex items-center justify-between">
-                                <span className="flex items-center gap-2">
-                                    Forensic Reasoning
-                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${item.confidenceScore > 80 ? 'bg-red-500/20 text-red-300 border-red-500/30' : 'bg-teal-500/20 text-teal-300 border-teal-500/30'}`}>
-                                        {item.confidenceScore}% Confidence
-                                    </span>
-                                </span>
-                                <TTSButton text={item.reason} id={`reason-${cardIndex}`} currentPlaying={currentAudio} onPlay={onTTS} />
-                            </h4>
-                            <p className="text-sm text-teal-200/90 leading-relaxed pr-8">{item.reason}</p>
-                        </div>
-                    </div>
-                    {item.context && (
-                        <div className="border-t border-teal-800/50 pt-3">
-                            <h4 className="font-semibold text-gray-300 text-xs mb-1">Context</h4>
-                            <p className="text-sm text-gray-400 italic">{item.context}</p>
-                        </div>
-                    )}
-                    <div>
-                        <h4 className="font-semibold text-gray-300 text-xs mb-1 mt-3">Suggestions</h4>
-                        <div className="space-y-2 mt-2">
-                            {item.suggestions.map((suggestion, index) => (
-                                <motion.div 
-                                    key={index} 
-                                    initial={{ opacity: 0, x: -10 }} 
-                                    animate={{ opacity: 1, x: 0 }} 
-                                    className="flex items-start justify-between gap-2 p-2 rounded-lg bg-white/5 border border-white/10 hover:border-teal-400/30 transition-colors group"
-                                >
-                                    <p className="text-sm text-gray-200 flex-1 break-words">
-                                        <span className="font-bold text-teal-400 mr-1">{index + 1}.</span> {suggestion}
-                                    </p>
-                                    <div className="flex gap-1.5 flex-shrink-0">
-                                        <TTSButton text={suggestion} id={`sugg-${cardIndex}-${index}`} currentPlaying={currentAudio} onPlay={onTTS} />
-                                        <button onClick={() => handleCopySuggestion(suggestion, index)} className="p-1.5 rounded-md text-gray-400 hover:text-white transition-colors">
-                                            <AnimatePresence mode="wait" initial={false}>
-                                                {copiedSuggestionIndex === index ? <CheckIcon /> : <ClipboardIcon />}
-                                            </AnimatePresence>
-                                        </button>
-                                        <button onClick={() => onImplementSuggestion(item.originalText, suggestion)} className="flex items-center gap-1.5 text-xs font-semibold text-teal-300 hover:text-teal-200 bg-teal-500/10 hover:bg-teal-500/20 px-2.5 py-1.5 rounded-lg transition-all transform hover:scale-105">
-                                            <ImplementIcon /> <span className="hidden sm:inline">Implement</span>
-                                        </button>
-                                    </div>
-                                </motion.div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </motion.div>
-        </div>
-    );
-};
 
 const TextAnalyzer: React.FC = () => {
     const [text, setText] = useState<string>('');
@@ -263,7 +59,7 @@ const TextAnalyzer: React.FC = () => {
     const [charCount, setCharCount] = useState(0);
     const CHAR_LIMIT = 20000;
     const fileUploadRef = useRef<HTMLInputElement>(null);
-    
+
     const [isImprovementDropdownOpen, setIsImprovementDropdownOpen] = useState(false);
     const [improvementStyle, setImprovementStyle] = useState('fix');
     const improvementRef = useRef<HTMLDivElement>(null);
@@ -271,7 +67,6 @@ const TextAnalyzer: React.FC = () => {
     const [isStyleSetupOpen, setIsStyleSetupOpen] = useState(false);
     const [analysisHistory, setAnalysisHistory] = useState<HistoryItem[]>([]);
     const [isHistoryPanelOpen, setIsHistoryPanelOpen] = useState(false);
-    const [isCloudPickerOpen, setIsCloudPickerOpen] = useState(false);
     const analyzerRef = useRef<HTMLDivElement>(null);
 
     const isLoading = !!loadingAction;
@@ -289,11 +84,7 @@ const TextAnalyzer: React.FC = () => {
             try {
                 let result: string | null = null;
                 try {
-                    const res = await fetch('/humanize', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ text, mode: humanizeMode }),
-                    });
+                    const res = await fetch('/humanize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text, mode: humanizeMode }) });
                     if (res.ok) {
                         const data = await res.json();
                         if (!data.fallback && data.humanized_text) result = data.humanized_text;
@@ -329,10 +120,7 @@ const TextAnalyzer: React.FC = () => {
     }, []);
 
     const stopAudio = () => {
-        if (audioSourceRef.current) {
-            audioSourceRef.current.stop();
-            audioSourceRef.current = null;
-        }
+        if (audioSourceRef.current) { audioSourceRef.current.stop(); audioSourceRef.current = null; }
         setIsAudioPlaying(false);
         setCurrentAudioId(null);
     };
@@ -388,7 +176,7 @@ const TextAnalyzer: React.FC = () => {
     const handlePredictText = async () => {
         setLoadingAction('predict');
         try { setPrediction(await predictNextText(text, writingStyle)); }
-        catch (err: any) { setError('Prediction failed.'); }
+        catch { setError('Prediction failed.'); }
         finally { setLoadingAction(null); }
     };
 
@@ -414,24 +202,20 @@ const TextAnalyzer: React.FC = () => {
     const handleImplementSuggestion = (original: string, suggestion: string) => setText(prev => prev.replace(original, suggestion));
 
     const hasResults = results && results.length > 0;
-    const aiScore = hasResults ? results[0].aiLikelihood : null;
+    const aiScore = hasResults ? results![0].aiLikelihood : null;
 
     return (
         <div ref={analyzerRef} className="relative">
-            {/* Modal overlays */}
             <AnimatePresence>
                 {isStyleSetupOpen && <WritingStyleSetup onSave={(p) => { setWritingStyle(p); localStorage.setItem('userWritingStyle', JSON.stringify(p)); setIsStyleSetupOpen(false); }} onClose={() => setIsStyleSetupOpen(false)} initialProfile={writingStyle} />}
                 {isHistoryPanelOpen && <HistoryPanel history={analysisHistory} onSelect={(item) => { setText(item.text); setResults([{ ...item.result, fileName: 'From History' }]); setIsHistoryPanelOpen(false); }} onDelete={(id) => setAnalysisHistory(prev => prev.filter(i => i.id !== id))} onClear={() => setAnalysisHistory([])} onClose={() => setIsHistoryPanelOpen(false)} />}
-                {isCloudPickerOpen && <CloudPicker onClose={() => setIsCloudPickerOpen(false)} onSelect={(f) => { setText(`[Imported: ${f.name}]\nSample content...`); setIsCloudPickerOpen(false); }} allowedMimeTypes={['text/plain']} />}
             </AnimatePresence>
 
-            {/* Workspace */}
             <div className="flex flex-col lg:flex-row border border-purple-500/20 rounded-2xl bg-[#0a0a12] shadow-2xl shadow-purple-900/10 overflow-hidden" style={{ minHeight: '620px' }}>
 
                 {/* ════ LEFT PANE ════ */}
                 <div className="w-full lg:w-1/2 flex flex-col bg-[#06060c]/60 border-b lg:border-b-0 lg:border-r border-white/5">
 
-                    {/* Pane header */}
                     <div className="flex items-center justify-between px-4 py-3 border-b border-white/5 shrink-0">
                         <span className="text-[10px] font-bold tracking-wider text-pink-500">YOUR TEXT</span>
                         <div className="flex items-center gap-3">
@@ -442,7 +226,6 @@ const TextAnalyzer: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Textarea */}
                     <div className="flex-1 relative p-3 min-h-[220px]">
                         <textarea
                             value={text}
@@ -463,7 +246,6 @@ const TextAnalyzer: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Prediction banner */}
                     <AnimatePresence>
                         {prediction && (
                             <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="mx-3 mb-2 p-3 bg-purple-900/30 border border-purple-500/30 rounded-xl flex items-center justify-between gap-3 shrink-0">
@@ -476,16 +258,11 @@ const TextAnalyzer: React.FC = () => {
                         )}
                     </AnimatePresence>
 
-                    {/* Action footer */}
                     <div className="px-4 py-3 border-t border-white/5 bg-[#06060c] shrink-0">
-                        {/* File actions row */}
                         <div className="flex items-center justify-between mb-3">
                             <div className="flex gap-2">
                                 <button onClick={() => fileUploadRef.current?.click()} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 bg-white/5 hover:bg-white/10 px-2.5 py-1.5 rounded-lg transition-colors border border-white/5">
                                     <TextUploadIcon /> File
-                                </button>
-                                <button onClick={() => setIsCloudPickerOpen(true)} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 bg-white/5 hover:bg-white/10 px-2.5 py-1.5 rounded-lg transition-colors border border-white/5">
-                                    <CloudIcon /> Cloud
                                 </button>
                                 <input type="file" ref={fileUploadRef} className="hidden" accept="text/plain,.txt" onChange={(e) => {
                                     const file = e.target.files?.[0];
@@ -502,7 +279,6 @@ const TextAnalyzer: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Smart actions row */}
                         <div className="flex flex-wrap gap-2 items-center">
                             <button onClick={handleAnalyze} disabled={isLoading || !text.trim()}
                                 className="flex items-center gap-1.5 text-xs font-medium text-slate-300 bg-white/5 hover:bg-white/10 px-3 py-2 rounded-full border border-white/10 transition-colors disabled:opacity-40">
@@ -564,7 +340,6 @@ const TextAnalyzer: React.FC = () => {
                 {/* ════ RIGHT PANE ════ */}
                 <div className="w-full lg:w-1/2 flex flex-col bg-[#0a0a14]">
 
-                    {/* Pane header */}
                     <div className="flex items-center gap-2 px-4 py-3 border-b border-white/5 shrink-0">
                         <span className="text-[10px] font-bold tracking-wider text-purple-400 flex-1">AI ANALYSIS</span>
                         <AnimatePresence>
@@ -589,7 +364,6 @@ const TextAnalyzer: React.FC = () => {
                         </button>
                     </div>
 
-                    {/* Cards */}
                     <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
 
                         {/* Card 1 — AI Probability */}
@@ -729,7 +503,6 @@ const TextAnalyzer: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Empty state */}
                         {!hasResults && !correctedText && !rephrasedGptResults && !isLoading && (
                             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center justify-center flex-1 py-12 gap-4 select-none pointer-events-none">
                                 <motion.img

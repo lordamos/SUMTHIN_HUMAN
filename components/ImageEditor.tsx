@@ -129,8 +129,29 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageBase64, mimeType, initia
     const [isDrawing, setIsDrawing] = useState(false);
     const [hasMask, setHasMask] = useState(!!initialDraft?.maskDataUrl);
     
-    const [history, setHistory] = useState<string[]>(initialDraft?.history || [imageBase64]);
-    const [historyIndex, setHistoryIndex] = useState(initialDraft?.historyIndex || 0);
+    const b64ToBlobUrl = (b64: string, mime: string): string => {
+        const bin = atob(b64);
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        return URL.createObjectURL(new Blob([arr], { type: mime }));
+    };
+
+    const blobUrlToB64 = async (url: string): Promise<string> => {
+        const res = await fetch(url);
+        const blob = await res.blob();
+        return new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve((reader.result as string).split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    };
+
+    const [history, setHistory] = useState<string[]>(() => {
+        const initial = b64ToBlobUrl(initialDraft?.currentImage || imageBase64, mimeType);
+        return [initial];
+    });
+    const [historyIndex, setHistoryIndex] = useState(0);
 
     const AUTO_SAVE_INTERVAL = 30000; // 30 seconds
 
@@ -182,14 +203,19 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageBase64, mimeType, initia
         }
     }, [currentImage, activeTool]);
 
+    useEffect(() => {
+        const blobUrls = history;
+        return () => { blobUrls.forEach(url => { if (url.startsWith('blob:')) URL.revokeObjectURL(url); }); };
+    }, []);
+
     const handleSaveDraftInternal = useCallback((isAuto: boolean = false) => {
         if (onSaveDraft) {
             if (isAuto) setIsAutoSaving(true);
             
             const draft: ImageDraftState = {
                 currentImage,
-                history,
-                historyIndex,
+                history: [currentImage],
+                historyIndex: 0,
                 maskDataUrl: hasMask ? canvasRef.current?.toDataURL() : undefined,
                 timestamp: Date.now()
             };
@@ -367,8 +393,10 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageBase64, mimeType, initia
         
         const resultBase64 = tempCanvas.toDataURL(mimeType).split(',')[1];
         
-        const newHistory = history.slice(0, historyIndex + 1);
-        newHistory.push(resultBase64);
+        const slicedOff = history.slice(historyIndex + 1);
+        slicedOff.forEach(url => { if (url.startsWith('blob:')) URL.revokeObjectURL(url); });
+        const newBlobUrl = b64ToBlobUrl(resultBase64, mimeType);
+        const newHistory = [...history.slice(0, historyIndex + 1), newBlobUrl];
         setHistory(newHistory);
         setHistoryIndex(newHistory.length - 1);
         setCurrentImage(resultBase64);
@@ -386,11 +414,17 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageBase64, mimeType, initia
         }
     };
 
-    const handleUndo = () => {
+    const handleUndo = async () => {
         if (historyIndex > 0) {
             const newIndex = historyIndex - 1;
             setHistoryIndex(newIndex);
-            setCurrentImage(history[newIndex]);
+            const blobUrl = history[newIndex];
+            try {
+                const b64 = await blobUrlToB64(blobUrl);
+                setCurrentImage(b64);
+            } catch {
+                setError("Failed to undo — history entry unavailable.");
+            }
             clearMask();
         }
     };
@@ -473,8 +507,10 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageBase64, mimeType, initia
                 refImage?.mime
             );
 
-            const newHistory = history.slice(0, historyIndex + 1);
-            newHistory.push(resultBase64);
+            const slicedOff2 = history.slice(historyIndex + 1);
+            slicedOff2.forEach(url => { if (url.startsWith('blob:')) URL.revokeObjectURL(url); });
+            const newBlobUrl2 = b64ToBlobUrl(resultBase64, mimeType);
+            const newHistory = [...history.slice(0, historyIndex + 1), newBlobUrl2];
             setHistory(newHistory);
             setHistoryIndex(newHistory.length - 1);
             setCurrentImage(resultBase64);
