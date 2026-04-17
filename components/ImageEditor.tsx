@@ -147,8 +147,15 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageBase64, mimeType, initia
         });
     };
 
+    const allBlobUrlsRef = useRef<Set<string>>(new Set());
+
+    const trackBlobUrl = (url: string): string => {
+        allBlobUrlsRef.current.add(url);
+        return url;
+    };
+
     const [history, setHistory] = useState<string[]>(() => {
-        const initial = b64ToBlobUrl(initialDraft?.currentImage || imageBase64, mimeType);
+        const initial = trackBlobUrl(b64ToBlobUrl(initialDraft?.currentImage || imageBase64, mimeType));
         return [initial];
     });
     const [historyIndex, setHistoryIndex] = useState(0);
@@ -204,8 +211,7 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageBase64, mimeType, initia
     }, [currentImage, activeTool]);
 
     useEffect(() => {
-        const blobUrls = history;
-        return () => { blobUrls.forEach(url => { if (url.startsWith('blob:')) URL.revokeObjectURL(url); }); };
+        return () => { allBlobUrlsRef.current.forEach(url => URL.revokeObjectURL(url)); };
     }, []);
 
     const handleSaveDraftInternal = useCallback((isAuto: boolean = false) => {
@@ -394,8 +400,8 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageBase64, mimeType, initia
         const resultBase64 = tempCanvas.toDataURL(mimeType).split(',')[1];
         
         const slicedOff = history.slice(historyIndex + 1);
-        slicedOff.forEach(url => { if (url.startsWith('blob:')) URL.revokeObjectURL(url); });
-        const newBlobUrl = b64ToBlobUrl(resultBase64, mimeType);
+        slicedOff.forEach(url => { URL.revokeObjectURL(url); allBlobUrlsRef.current.delete(url); });
+        const newBlobUrl = trackBlobUrl(b64ToBlobUrl(resultBase64, mimeType));
         const newHistory = [...history.slice(0, historyIndex + 1), newBlobUrl];
         setHistory(newHistory);
         setHistoryIndex(newHistory.length - 1);
@@ -508,8 +514,8 @@ const ImageEditor: React.FC<ImageEditorProps> = ({ imageBase64, mimeType, initia
             );
 
             const slicedOff2 = history.slice(historyIndex + 1);
-            slicedOff2.forEach(url => { if (url.startsWith('blob:')) URL.revokeObjectURL(url); });
-            const newBlobUrl2 = b64ToBlobUrl(resultBase64, mimeType);
+            slicedOff2.forEach(url => { URL.revokeObjectURL(url); allBlobUrlsRef.current.delete(url); });
+            const newBlobUrl2 = trackBlobUrl(b64ToBlobUrl(resultBase64, mimeType));
             const newHistory = [...history.slice(0, historyIndex + 1), newBlobUrl2];
             setHistory(newHistory);
             setHistoryIndex(newHistory.length - 1);
