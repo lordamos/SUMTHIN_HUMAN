@@ -625,6 +625,12 @@ threading.Thread(target=_evict_webcam_sessions, daemon=True).start()
 # are mirrored to SQLite via job_store so they survive a server restart.
 _video_jobs: dict = {}
 
+# Exponential moving average of frame-processing speed (frames / real second).
+# Seeded at 2.0 fps — a conservative baseline for CPU-based face-swap work.
+# Updated after every successfully completed job.
+_avg_processing_fps: float = 2.0
+_avg_processing_fps_lock = threading.Lock()
+
 # Dedicated directory for video output files so we can detect orphans on startup.
 _VIDEO_OUTPUT_DIR = os.path.abspath(
     os.getenv("VIDEO_OUTPUT_DIR", "")
@@ -821,6 +827,7 @@ def _run_video_job(job_id: str, video_path: str, source_img, pre_output_path: st
                    frame_skip: int = 2) -> None:
     """Background thread target for video face swap jobs."""
     from video_engine import process_video
+    global _avg_processing_fps
     job = _video_jobs[job_id]
     cancel_event: threading.Event = job["cancel_event"]
 
@@ -830,6 +837,7 @@ def _run_video_job(job_id: str, video_path: str, source_img, pre_output_path: st
         job["progress"] = (frame_num / total_frames) if total_frames > 0 else 0.0
 
     try:
+        t_start = time.time()
         output_path = process_video(
             video_path,
             source_img,
@@ -838,6 +846,12 @@ def _run_video_job(job_id: str, video_path: str, source_img, pre_output_path: st
             cancel_event=cancel_event,
             frame_skip=frame_skip,
         )
+        elapsed = time.time() - t_start
+        total_frames_done = job.get("total", 0)
+        if output_path and elapsed > 0 and total_frames_done > 0:
+            observed_fps = total_frames_done / elapsed
+            with _avg_processing_fps_lock:
+                _avg_processing_fps = 0.7 * _avg_processing_fps + 0.3 * observed_fps
         if cancel_event.is_set() or output_path is None:
             job["status"] = "cancelled"
             job_store.update_job(job_id, status="cancelled")
@@ -1017,6 +1031,9 @@ def video_jobs_stats():
             if oldest_age is None or age > oldest_age:
                 oldest_age = age
 
+    with _avg_processing_fps_lock:
+        current_processing_fps = round(_avg_processing_fps, 2)
+
     return jsonify({
         "counts": counts,
         "total_jobs": len(_video_jobs),
@@ -1024,6 +1041,7 @@ def video_jobs_stats():
         "oldest_job_age_seconds": round(oldest_age, 1) if oldest_age is not None else None,
         "ttl_seconds": _VIDEO_JOB_TTL,
         "max_bytes": _VIDEO_JOB_MAX_BYTES,
+        "processing_fps": current_processing_fps,
     })
 
 

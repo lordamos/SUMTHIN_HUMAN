@@ -8,6 +8,7 @@ interface JobStats {
     output_bytes: number;
     oldest_job_age_seconds: number | null;
     ttl_seconds: number;
+    processing_fps?: number;
 }
 
 function formatBytes(bytes: number): string {
@@ -511,6 +512,20 @@ const VideoSwapPanel: React.FC = () => {
 
     const isLongVideo = warningThreshold !== null && videoDuration !== null && videoDuration > warningThreshold;
 
+    const ASSUMED_VIDEO_FPS = 25;
+    const estimatedProcessingSeconds = (() => {
+        if (!videoDuration || !jobStats?.processing_fps || jobStats.processing_fps <= 0) return null;
+        return Math.ceil((videoDuration * ASSUMED_VIDEO_FPS) / jobStats.processing_fps);
+    })();
+
+    const formatEstimatedTime = (seconds: number): string => {
+        if (seconds < 60) return `~${seconds}s`;
+        const h = Math.floor(seconds / 3600);
+        const m = Math.ceil((seconds % 3600) / 60);
+        if (h > 0) return `~${h}h ${m}m`;
+        return `~${m} min`;
+    };
+
     const formatDuration = (seconds: number) => {
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
@@ -614,7 +629,12 @@ const VideoSwapPanel: React.FC = () => {
                         <div className="px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 flex items-start gap-2">
                             <span className="mt-0.5 flex-shrink-0">⚠️</span>
                             <span>
-                                This video is <span className="font-bold">{formatDuration(videoDuration!)}</span> long. Processing may take a while — you can still proceed, but expect a longer wait.
+                                This video is <span className="font-bold">{formatDuration(videoDuration!)}</span> long.{' '}
+                                {estimatedProcessingSeconds !== null
+                                    ? <>Rough estimated processing time: <span className="font-bold">{formatEstimatedTime(estimatedProcessingSeconds)}</span> (may vary).</>
+                                    : <>Processing may take a while.</>
+                                }{' '}
+                                You can still proceed, but expect a longer wait.
                             </span>
                         </div>
                     )}
