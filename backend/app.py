@@ -502,7 +502,7 @@ def video_face_swap_route():
             "progress": 0.0,
             "frame": 0,
             "total": 0,
-            "output_path": None,
+            "output_path": pre_output_path,
             "cancel_event": cancel_event,
             "error": None,
             "created_at": now,
@@ -638,6 +638,33 @@ _VIDEO_OUTPUT_DIR = os.path.abspath(
 )
 os.makedirs(_VIDEO_OUTPUT_DIR, exist_ok=True)
 
+# Pattern that every job output file written by this server must match.
+# Files that don't match are not touched by orphan scans so that operators
+# can safely place unrelated files in the same directory.
+# Format: <32 hex chars>[_final|_silent].mp4
+import re as _re
+_JOB_OUTPUT_PATTERN = _re.compile(r'^[0-9a-f]{32}(_final|_silent)?\.mp4$')
+
+
+def _job_known_paths(job_map: dict) -> set:
+    """Return the set of absolute paths that are actively owned by tracked jobs.
+
+    For each job we include the base output path plus the _final and _silent
+    variants that video_engine may create during processing so that the orphan
+    scan never removes a file that is still being assembled.
+    """
+    paths: set = set()
+    for job in job_map.values():
+        op = job.get("output_path")
+        if not op:
+            continue
+        paths.add(os.path.abspath(op))
+        base = op[:-4] if op.endswith(".mp4") else op
+        paths.add(os.path.abspath(base + "_final.mp4"))
+        paths.add(os.path.abspath(base + "_silent.mp4"))
+    return paths
+
+
 # How long (seconds) before an undownloaded job is considered abandoned.
 # Override via the VIDEO_JOB_TTL env var (default: 3600 = 1 hour).
 _VIDEO_JOB_TTL = int(os.getenv("VIDEO_JOB_TTL", "3600"))
@@ -677,7 +704,6 @@ def _startup_restore_jobs() -> None:
     4. Delete output files that have no matching job record (orphaned by crash).
     """
     rows = job_store.load_all_jobs()
-    known_output_paths: set = set()
 
     for row in rows:
         jid = row["job_id"]
@@ -713,9 +739,6 @@ def _startup_restore_jobs() -> None:
             job_store.update_job(jid, status="error", error="Output file missing after restart.")
             output_path = None
 
-        if output_path:
-            known_output_paths.add(os.path.abspath(output_path))
-
         _video_jobs[jid] = {
             "status": status,
             "progress": 1.0 if status == "done" else 0.0,
@@ -728,11 +751,34 @@ def _startup_restore_jobs() -> None:
             "last_polled_at": row["last_polled_at"],
         }
 
-    # Scan the output directory for files not referenced by any job record.
+    # Evict jobs that are already older than the TTL at startup so the disk
+    # doesn't stay full until the first periodic sweep fires.
+    startup_cutoff = time.time() - _VIDEO_JOB_TTL
+    stale_at_start = [
+        jid for jid, job in list(_video_jobs.items())
+        if job.get("last_polled_at", 0) < startup_cutoff
+    ]
+    for jid in stale_at_start:
+        job = _video_jobs.pop(jid, None)
+        output_path = (job or {}).get("output_path")
+        if output_path and os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except Exception:
+                pass
+        job_store.delete_job(jid)
+
+    # Scan the output directory for files not referenced by any surviving job.
+    # Use _job_known_paths so _final/_silent variants for active jobs are also
+    # protected.  Only filenames matching _JOB_OUTPUT_PATTERN are examined so
+    # that operator-placed files in the directory are left untouched.
     try:
+        remaining_known = _job_known_paths(_video_jobs)
         for fname in os.listdir(_VIDEO_OUTPUT_DIR):
+            if not _JOB_OUTPUT_PATTERN.match(fname):
+                continue
             fpath = os.path.abspath(os.path.join(_VIDEO_OUTPUT_DIR, fname))
-            if fpath not in known_output_paths:
+            if fpath not in remaining_known:
                 try:
                     os.remove(fpath)
                 except Exception:
@@ -789,6 +835,26 @@ def _cleanup_video_jobs() -> None:
         for row in stale_rows:
             jid = row["job_id"]
             _evict_job(jid, row, delete_from_db=False)
+
+        # --- Orphaned output file scan ---
+        # Delete any job-output file in the directory that has no corresponding
+        # in-memory job record.  known_paths includes _final/_silent variants
+        # so files still being assembled by a running job are never removed.
+        # Only filenames matching _JOB_OUTPUT_PATTERN are touched, leaving any
+        # operator-placed files in the directory untouched.
+        try:
+            known_paths = _job_known_paths(_video_jobs)
+            for fname in os.listdir(_VIDEO_OUTPUT_DIR):
+                if not _JOB_OUTPUT_PATTERN.match(fname):
+                    continue
+                fpath = os.path.abspath(os.path.join(_VIDEO_OUTPUT_DIR, fname))
+                if fpath not in known_paths:
+                    try:
+                        os.remove(fpath)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
         # --- Cap-based eviction (oldest done jobs first) ---
         if _VIDEO_JOB_MAX_BYTES > 0:
