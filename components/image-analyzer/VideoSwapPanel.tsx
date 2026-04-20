@@ -135,6 +135,12 @@ const VideoSwapPanel: React.FC = () => {
     });
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [customMinutes, setCustomMinutes] = useState('');
+    const [exportCopied, setExportCopied] = useState(false);
+    const [exportError, setExportError] = useState(false);
+    const [importOpen, setImportOpen] = useState(false);
+    const [importText, setImportText] = useState('');
+    const [importError, setImportError] = useState<string | null>(null);
+    const [importSuccess, setImportSuccess] = useState(false);
 
     const applyThreshold = (value: number | null) => {
         setWarningThreshold(value);
@@ -145,6 +151,59 @@ const VideoSwapPanel: React.FC = () => {
                 localStorage.setItem(STORAGE_KEY_THRESHOLD, String(value));
             }
         } catch { /* ignore */ }
+    };
+
+    const handleExportSettings = () => {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY_THRESHOLD);
+            const blob = JSON.stringify({
+                version: 1,
+                [STORAGE_KEY_THRESHOLD]: raw ?? String(DEFAULT_THRESHOLD),
+            }, null, 2);
+            navigator.clipboard.writeText(blob).then(() => {
+                setExportCopied(true);
+                setExportError(false);
+                setTimeout(() => setExportCopied(false), 2000);
+            }).catch(() => {
+                setExportError(true);
+                setTimeout(() => setExportError(false), 3000);
+            });
+        } catch {
+            setExportError(true);
+            setTimeout(() => setExportError(false), 3000);
+        }
+    };
+
+    const handleImportSettings = () => {
+        setImportError(null);
+        setImportSuccess(false);
+        try {
+            const parsed = JSON.parse(importText.trim());
+            if (typeof parsed !== 'object' || parsed === null) {
+                setImportError('Invalid settings — expected a JSON object.');
+                return;
+            }
+            const raw = parsed[STORAGE_KEY_THRESHOLD];
+            if (raw === undefined) {
+                setImportError('No video settings found in this blob.');
+                return;
+            }
+            if (raw === 'disabled') {
+                applyThreshold(null);
+            } else {
+                const num = parseInt(String(raw), 10);
+                if (isNaN(num) || num <= 0) {
+                    setImportError('Invalid threshold value in settings.');
+                    return;
+                }
+                applyThreshold(num);
+            }
+            setImportSuccess(true);
+            setImportText('');
+            setTimeout(() => setImportSuccess(false), 2500);
+        } catch {
+            setImportError('Could not parse settings — make sure you paste the full JSON blob.');
+        }
     };
 
     const [recentJobs, setRecentJobs] = useState<RecentJob[]>(() => loadRecentJobs());
@@ -1013,6 +1072,47 @@ const VideoSwapPanel: React.FC = () => {
                                     >
                                         Set
                                     </button>
+                                </div>
+                                <div className="border-t border-white/8 pt-3 space-y-2">
+                                    <p className="text-[10px] text-gray-500">Export or import these settings as a JSON blob to carry them across browsers or share with teammates.</p>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={handleExportSettings}
+                                            className={`flex-1 px-3 py-1.5 rounded-lg text-[10px] font-black border transition-all ${exportError ? 'border-red-500/40 bg-red-500/10 text-red-300' : 'border-cyan-500/40 bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20'}`}
+                                        >
+                                            {exportCopied ? '✓ Copied!' : exportError ? '⚠ Copy failed' : '📋 Export settings'}
+                                        </button>
+                                        <button
+                                            onClick={() => { setImportOpen(o => !o); setImportError(null); setImportSuccess(false); setImportText(''); }}
+                                            className="flex-1 px-3 py-1.5 rounded-lg text-[10px] font-black border border-violet-500/40 bg-violet-500/10 text-violet-300 hover:bg-violet-500/20 transition-all"
+                                        >
+                                            📥 Import settings
+                                        </button>
+                                    </div>
+                                    {importOpen && (
+                                        <div className="space-y-2">
+                                            <textarea
+                                                value={importText}
+                                                onChange={e => { setImportText(e.target.value); setImportError(null); setImportSuccess(false); }}
+                                                placeholder='Paste your settings JSON here, e.g. {"version":1,"videoWarningThresholdSeconds":"300"}'
+                                                rows={4}
+                                                className="w-full px-2.5 py-2 rounded-lg bg-white/5 border border-white/10 text-[10px] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-violet-500/50 resize-none font-mono"
+                                            />
+                                            {importError && (
+                                                <p className="text-[10px] text-red-400">{importError}</p>
+                                            )}
+                                            {importSuccess && (
+                                                <p className="text-[10px] text-emerald-400">✓ Settings applied successfully.</p>
+                                            )}
+                                            <button
+                                                onClick={handleImportSettings}
+                                                disabled={!importText.trim()}
+                                                className="w-full px-3 py-1.5 rounded-lg text-[10px] font-black border border-violet-500/40 bg-violet-500/15 text-violet-300 hover:bg-violet-500/25 transition-all disabled:opacity-40"
+                                            >
+                                                Apply imported settings
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </motion.div>
                         )}
