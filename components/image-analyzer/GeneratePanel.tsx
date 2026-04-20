@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { generateImages } from '../../services/geminiService';
 
 type GenMode = 'image' | 'video';
-type AspectRatio = '1:1' | '16:9' | '9:16' | '4:3' | '3:4';
 
 interface GeneratedImage {
     id: string;
@@ -26,19 +26,11 @@ const Spinner: React.FC<{ small?: boolean }> = ({ small }) => (
     </svg>
 );
 
-const ASPECT_RATIOS: { label: string; value: AspectRatio }[] = [
-    { label: '1:1', value: '1:1' },
-    { label: '16:9', value: '16:9' },
-    { label: '9:16', value: '9:16' },
-    { label: '4:3', value: '4:3' },
-    { label: '3:4', value: '3:4' },
-];
 
 const GeneratePanel: React.FC = () => {
     const [genMode, setGenMode] = useState<GenMode>('image');
 
     const [imgPrompt, setImgPrompt] = useState('');
-    const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
     const [numOutputs, setNumOutputs] = useState(1);
     const [imgLoading, setImgLoading] = useState(false);
     const [imgError, setImgError] = useState<string | null>(null);
@@ -62,15 +54,8 @@ const GeneratePanel: React.FC = () => {
         setImgLoading(true);
         setImgError(null);
         try {
-            const res = await fetch('/generate/image', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: imgPrompt.trim(), aspect_ratio: aspectRatio, num_outputs: numOutputs }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
-            const urls: string[] = data.urls;
-            const newImages: GeneratedImage[] = urls.map(url => ({
+            const dataUrls = await generateImages(imgPrompt.trim(), numOutputs);
+            const newImages: GeneratedImage[] = dataUrls.map(url => ({
                 id: Math.random().toString(36).slice(2),
                 url,
                 prompt: imgPrompt.trim(),
@@ -145,9 +130,10 @@ const GeneratePanel: React.FC = () => {
     const handleDownloadImage = (url: string, index: number) => {
         const a = document.createElement('a');
         a.href = url;
-        a.download = `generated-image-${index + 1}.webp`;
-        a.target = '_blank';
+        a.download = `generated-image-${index + 1}.png`;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
     };
 
     return (
@@ -180,21 +166,7 @@ const GeneratePanel: React.FC = () => {
                                 className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-fuchsia-500/50 resize-none"
                                 onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleGenerateImage(); }}
                             />
-                        </div>
-
-                        <div>
-                            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Aspect Ratio</label>
-                            <div className="flex gap-1.5 flex-wrap">
-                                {ASPECT_RATIOS.map(ar => (
-                                    <button
-                                        key={ar.value}
-                                        onClick={() => setAspectRatio(ar.value)}
-                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${aspectRatio === ar.value ? 'border-fuchsia-500/60 bg-fuchsia-500/20 text-fuchsia-300' : 'border-white/10 bg-white/5 text-gray-400 hover:text-gray-200 hover:border-white/20'}`}
-                                    >
-                                        {ar.label}
-                                    </button>
-                                ))}
-                            </div>
+                            <p className="text-[9px] text-gray-600 mt-1">Powered by Gemini · Free · ~5-10 seconds per image</p>
                         </div>
 
                         <div>

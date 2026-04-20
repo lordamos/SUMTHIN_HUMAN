@@ -415,3 +415,35 @@ export async function editImage(base64Image: string, mimeType: string, prompt: s
         throw new Error("Edit failed.");
     });
 }
+
+/**
+ * Generate images from a text prompt using Gemini's image generation model.
+ * Returns an array of data URLs (data:image/png;base64,...).
+ * Each image is generated in a separate parallel call since the model
+ * produces one image per request.
+ */
+export async function generateImages(prompt: string, count: number = 1): Promise<string[]> {
+    const clampedCount = Math.max(1, Math.min(4, count));
+    const calls = Array.from({ length: clampedCount }, () =>
+        ai.models.generateContent({
+            model: 'gemini-2.0-flash-preview-image-generation',
+            contents: prompt,
+            config: {
+                responseModalities: [Modality.IMAGE],
+            },
+        })
+    );
+    const responses = await Promise.all(calls);
+    const dataUrls: string[] = [];
+    for (const response of responses) {
+        const parts = response.candidates?.[0]?.content?.parts ?? [];
+        for (const part of parts) {
+            if ((part as any).inlineData) {
+                const { data, mimeType } = (part as any).inlineData;
+                dataUrls.push(`data:${mimeType};base64,${data}`);
+            }
+        }
+    }
+    if (dataUrls.length === 0) throw new Error('No images were returned by Gemini.');
+    return dataUrls;
+}
