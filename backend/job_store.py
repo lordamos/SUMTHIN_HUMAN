@@ -29,8 +29,11 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
+_STATS_HISTORY_MAX = 60
+
+
 def init_db() -> None:
-    """Create the jobs table if it does not already exist."""
+    """Create the jobs and stats_history tables if they do not already exist."""
     with _lock:
         conn = _connect()
         try:
@@ -44,7 +47,56 @@ def init_db() -> None:
                     last_polled_at REAL NOT NULL
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS stats_history (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts           REAL    NOT NULL,
+                    total_jobs   INTEGER NOT NULL DEFAULT 0,
+                    running      INTEGER NOT NULL DEFAULT 0,
+                    done         INTEGER NOT NULL DEFAULT 0,
+                    error        INTEGER NOT NULL DEFAULT 0,
+                    cancelled    INTEGER NOT NULL DEFAULT 0,
+                    output_bytes INTEGER NOT NULL DEFAULT 0
+                )
+            """)
             conn.commit()
+        finally:
+            conn.close()
+
+
+def insert_stats_snapshot(ts: float, total_jobs: int, running: int, done: int,
+                          error: int, cancelled: int, output_bytes: int) -> None:
+    """Insert one stats snapshot, then prune the table to _STATS_HISTORY_MAX rows."""
+    with _lock:
+        conn = _connect()
+        try:
+            conn.execute(
+                "INSERT INTO stats_history "
+                "(ts, total_jobs, running, done, error, cancelled, output_bytes) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (ts, total_jobs, running, done, error, cancelled, output_bytes),
+            )
+            conn.execute(
+                "DELETE FROM stats_history WHERE id NOT IN "
+                "(SELECT id FROM stats_history ORDER BY id DESC LIMIT ?)",
+                (_STATS_HISTORY_MAX,),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def get_stats_history(limit: int = _STATS_HISTORY_MAX) -> list:
+    """Return up to `limit` most recent stats snapshots, oldest first."""
+    with _lock:
+        conn = _connect()
+        try:
+            rows = conn.execute(
+                "SELECT ts, total_jobs, running, done, error, cancelled, output_bytes "
+                "FROM stats_history ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+            return list(reversed([dict(r) for r in rows]))
         finally:
             conn.close()
 

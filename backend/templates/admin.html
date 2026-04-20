@@ -752,9 +752,50 @@
     doFetch();
   });
 
-  // Initial fetch + start loop
-  doFetch();
-  startAutoRefresh();
+  // ── Load persisted history on page load ──────────────────────────────────
+  function tsToLabel(ts) {
+    const d = new Date(ts * 1000);
+    return d.getHours().toString().padStart(2,'0') + ':' +
+           d.getMinutes().toString().padStart(2,'0') + ':' +
+           d.getSeconds().toString().padStart(2,'0');
+  }
+
+  async function loadHistory() {
+    try {
+      const res = await fetch('{{ history_url }}');
+      if (!res.ok) return;
+      const rows = await res.json();
+      if (!Array.isArray(rows) || rows.length === 0) return;
+      for (const row of rows) {
+        const stats = {
+          total_jobs: row.total_jobs,
+          counts: {
+            running:   row.running,
+            done:      row.done,
+            error:     row.error,
+            cancelled: row.cancelled,
+          },
+          output_bytes: row.output_bytes,
+        };
+        pushHistory(stats, tsToLabel(row.ts));
+      }
+      jobChart.data.labels = [...historyLabels];
+      jobChart.data.datasets[0].data = [...historyTotal];
+      jobChart.data.datasets[1].data = [...historyRunning];
+      jobChart.data.datasets[2].data = [...historyDone];
+      jobChart.data.datasets[3].data = [...historyError];
+      jobChart.update('none');
+      storageChart.data.labels = [...historyLabels];
+      storageChart.data.datasets[0].data = [...historyBytes];
+      storageChart.update('none');
+    } catch (_) {}
+  }
+
+  // Initial history prefill → first live fetch → start auto-refresh loop
+  loadHistory().then(() => {
+    doFetch();
+    startAutoRefresh();
+  });
 </script>
 </body>
 </html>

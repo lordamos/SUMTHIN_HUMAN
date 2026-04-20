@@ -447,10 +447,13 @@ def admin_dashboard():
     # replay the credentials automatically for same-origin requests.
     key_param = request.args.get("key", "")
     stats_url = "/video-jobs/stats"
+    history_url = "/video-jobs/history"
     if key_param:
         from urllib.parse import urlencode
-        stats_url += "?" + urlencode({"key": key_param})
-    return render_template("admin.html", stats_url=stats_url)
+        qs = urlencode({"key": key_param})
+        stats_url += "?" + qs
+        history_url += "?" + qs
+    return render_template("admin.html", stats_url=stats_url, history_url=history_url)
 
 
 @app.route("/health", methods=["GET"])
@@ -888,6 +891,45 @@ def _cleanup_video_jobs() -> None:
 _cleanup_thread = threading.Thread(target=_cleanup_video_jobs, daemon=True)
 _cleanup_thread.start()
 
+# ---------------------------------------------------------------------------
+# Background stats recorder — samples job counts + disk usage every 5 s and
+# persists the snapshot so the admin dashboard can show history after refresh.
+# ---------------------------------------------------------------------------
+_STATS_SAMPLE_INTERVAL = 5  # seconds
+
+
+def _record_stats_loop() -> None:
+    """Daemon loop: capture a stats snapshot every _STATS_SAMPLE_INTERVAL seconds."""
+    while True:
+        time.sleep(_STATS_SAMPLE_INTERVAL)
+        try:
+            counts: dict = {s: 0 for s in ("running", "done", "error", "cancelled")}
+            total_bytes = 0
+            for job in list(_video_jobs.values()):
+                status = job.get("status", "unknown")
+                counts[status] = counts.get(status, 0) + 1
+                output_path = job.get("output_path")
+                if output_path and os.path.exists(output_path):
+                    try:
+                        total_bytes += os.path.getsize(output_path)
+                    except OSError:
+                        pass
+            job_store.insert_stats_snapshot(
+                ts=time.time(),
+                total_jobs=len(_video_jobs),
+                running=counts.get("running", 0),
+                done=counts.get("done", 0),
+                error=counts.get("error", 0),
+                cancelled=counts.get("cancelled", 0),
+                output_bytes=total_bytes,
+            )
+        except Exception:
+            pass
+
+
+_stats_recorder_thread = threading.Thread(target=_record_stats_loop, daemon=True)
+_stats_recorder_thread.start()
+
 
 def _run_video_job(job_id: str, video_path: str, source_img, pre_output_path: str,
                    frame_skip: int = 2) -> None:
@@ -1109,6 +1151,24 @@ def video_jobs_stats():
         "max_bytes": _VIDEO_JOB_MAX_BYTES,
         "processing_fps": current_processing_fps,
     })
+
+
+@app.route("/video-jobs/history", methods=["GET"])
+def video_jobs_history():
+    """Return persisted stats snapshots for the admin dashboard history charts.
+
+    Returns up to 60 records (the last ~5 minutes sampled at 5-second intervals)
+    so the chart can be prefilled after a page refresh.  Protected by the same
+    ADMIN_SECRET credential as /video-jobs/stats.
+    """
+    if not _admin_authorized():
+        return Response(
+            "Unauthorized — provide ?key=<ADMIN_SECRET> or HTTP Basic Auth.",
+            status=401,
+            headers={"WWW-Authenticate": 'Basic realm="Admin Dashboard"'},
+        )
+    rows = job_store.get_stats_history()
+    return jsonify(rows)
 
 
 @app.route("/generate/image", methods=["POST"])
