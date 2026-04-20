@@ -448,12 +448,14 @@ def admin_dashboard():
     key_param = request.args.get("key", "")
     stats_url = "/video-jobs/stats"
     history_url = "/video-jobs/history"
+    list_url = "/video-jobs/list"
     if key_param:
         from urllib.parse import urlencode
         qs = urlencode({"key": key_param})
         stats_url += "?" + qs
         history_url += "?" + qs
-    return render_template("admin.html", stats_url=stats_url, history_url=history_url)
+        list_url += "?" + qs
+    return render_template("admin.html", stats_url=stats_url, history_url=history_url, list_url=list_url, key_param=key_param)
 
 
 @app.route("/health", methods=["GET"])
@@ -1169,6 +1171,64 @@ def video_jobs_history():
         )
     rows = job_store.get_stats_history()
     return jsonify(rows)
+
+
+@app.route("/video-jobs/list", methods=["GET"])
+def video_jobs_list():
+    """Return a list of all current jobs with status, age, and file size.
+
+    Protected by the same ADMIN_SECRET credential as /video-jobs/stats.
+    """
+    if not _admin_authorized():
+        return Response(
+            "Unauthorized — provide ?key=<ADMIN_SECRET> or HTTP Basic Auth.",
+            status=401,
+            headers={"WWW-Authenticate": 'Basic realm="Admin Dashboard"'},
+        )
+    now = time.time()
+    jobs = []
+    for job_id, job in list(_video_jobs.items()):
+        output_path = job.get("output_path")
+        file_size = 0
+        if output_path and os.path.exists(output_path):
+            try:
+                file_size = os.path.getsize(output_path)
+            except OSError:
+                pass
+        created_at = job.get("created_at")
+        age_seconds = round(now - created_at, 1) if created_at is not None else None
+        jobs.append({
+            "job_id": job_id,
+            "status": job.get("status", "unknown"),
+            "age_seconds": age_seconds,
+            "file_size": file_size,
+            "error": job.get("error"),
+        })
+    jobs.sort(key=lambda j: j["age_seconds"] if j["age_seconds"] is not None else 0, reverse=True)
+    return jsonify(jobs)
+
+
+@app.route("/video-jobs/<job_id>", methods=["DELETE"])
+def video_job_purge(job_id: str):
+    """Purge a completed, errored, or cancelled job — delete record and output file.
+
+    Running jobs must be cancelled first (via DELETE /video-cancel/<id>) before
+    they can be purged, to avoid data races with the worker thread.
+    Protected by the same ADMIN_SECRET credential as /video-jobs/stats.
+    """
+    if not _admin_authorized():
+        return Response(
+            "Unauthorized — provide ?key=<ADMIN_SECRET> or HTTP Basic Auth.",
+            status=401,
+            headers={"WWW-Authenticate": 'Basic realm="Admin Dashboard"'},
+        )
+    job = _video_jobs.get(job_id)
+    if job is None:
+        return jsonify({"error": "Job not found."}), 404
+    if job.get("status") == "running":
+        return jsonify({"error": "Cancel the job before purging it."}), 409
+    _evict_job(job_id)
+    return jsonify({"ok": True})
 
 
 @app.route("/generate/image", methods=["POST"])

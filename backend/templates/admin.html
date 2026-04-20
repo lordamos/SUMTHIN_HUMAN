@@ -324,6 +324,92 @@
       border-top: 1px solid rgba(168,85,247,0.08);
     }
 
+    /* Jobs table */
+    .jobs-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.7rem;
+      font-family: monospace;
+    }
+
+    .jobs-table th {
+      text-align: left;
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 0.4rem 0.75rem;
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .jobs-table td {
+      padding: 0.55rem 0.75rem;
+      border-bottom: 1px solid rgba(168,85,247,0.06);
+      vertical-align: middle;
+      color: var(--text);
+    }
+
+    .jobs-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .jobs-table tr:hover td {
+      background: rgba(168,85,247,0.04);
+    }
+
+    .jobs-empty {
+      text-align: center;
+      padding: 2rem;
+      color: var(--text-dim);
+      font-size: 0.7rem;
+      font-family: monospace;
+    }
+
+    /* Action buttons */
+    .btn-cancel {
+      background: rgba(251,191,36,0.10);
+      border: 1px solid rgba(251,191,36,0.3);
+      border-radius: 0.4rem;
+      color: var(--amber);
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.25rem 0.6rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-cancel:hover { background: rgba(251,191,36,0.2); }
+    .btn-cancel:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .btn-purge {
+      background: rgba(248,113,113,0.10);
+      border: 1px solid rgba(248,113,113,0.3);
+      border-radius: 0.4rem;
+      color: var(--red);
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.25rem 0.6rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-purge:hover { background: rgba(248,113,113,0.2); }
+    .btn-purge:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .job-id {
+      font-size: 0.6rem;
+      color: var(--text-muted);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     @media (max-width: 600px) {
       .stat-value { font-size: 1.1rem; }
       header { padding: 0.6rem 0.75rem; }
@@ -432,6 +518,18 @@
     <h2>Health &amp; Cleanup</h2>
     <div class="health-grid" id="health-grid">
       <div class="health-item"><div class="health-dot health-dot-ok"></div><span>Loading…</span></div>
+    </div>
+  </div>
+
+  <!-- Jobs management -->
+  <div class="card">
+    <div class="card-top-bar"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+      <h2 style="margin-bottom:0;">Job Management</h2>
+      <span id="jobs-count" style="font-size:0.6rem;font-family:monospace;color:var(--text-muted);"></span>
+    </div>
+    <div id="jobs-table-wrap">
+      <div class="jobs-empty">Loading jobs…</div>
     </div>
   </div>
 
@@ -748,8 +846,9 @@
 
   intervalSelect.addEventListener('change', () => {
     refreshInterval = parseInt(intervalSelect.value, 10);
-    startAutoRefresh();
+    startAutoRefreshCombined();
     doFetch();
+    fetchJobs();
   });
 
   // ── Load persisted history on page load ──────────────────────────────────
@@ -791,11 +890,149 @@
     } catch (_) {}
   }
 
-  // Initial history prefill → first live fetch → start auto-refresh loop
-  loadHistory().then(() => {
+  // Initial history prefill → first live fetch (jobs refresh handled below)
+  async function initDashboard() {
+    await loadHistory();
     doFetch();
-    startAutoRefresh();
-  });
+  }
+  initDashboard();
+
+  // ── Jobs table ────────────────────────────────────────────────────────────
+  const LIST_URL = '{{ list_url }}';
+  const KEY_PARAM = '{{ key_param }}';
+
+  function authUrl(base) {
+    if (KEY_PARAM) return base + (base.includes('?') ? '&' : '?') + 'key=' + encodeURIComponent(KEY_PARAM);
+    return base;
+  }
+
+  function statusPill(status) {
+    const map = {
+      running:   'pill-running',
+      done:      'pill-done',
+      error:     'pill-error',
+      cancelled: 'pill-cancelled',
+    };
+    return `<span class="pill ${map[status] || 'pill-cancelled'}">${status}</span>`;
+  }
+
+  async function fetchJobs() {
+    try {
+      const res = await fetch(LIST_URL);
+      if (!res.ok) return;
+      const jobs = await res.json();
+      renderJobsTable(jobs);
+    } catch (_) {}
+  }
+
+  function renderJobsTable(jobs) {
+    const wrap = document.getElementById('jobs-table-wrap');
+    const countEl = document.getElementById('jobs-count');
+    countEl.textContent = jobs.length + ' job' + (jobs.length !== 1 ? 's' : '');
+
+    if (jobs.length === 0) {
+      wrap.innerHTML = '<div class="jobs-empty">No jobs on record.</div>';
+      return;
+    }
+
+    const rows = jobs.map(job => {
+      const age = job.age_seconds !== null ? formatAge(job.age_seconds) : '—';
+      const size = job.file_size > 0 ? formatBytes(job.file_size) : '—';
+      const canCancel = job.status === 'running';
+      const canPurge  = job.status !== 'running';
+      return `
+        <tr>
+          <td class="job-id" title="${job.job_id}">${job.job_id}</td>
+          <td>${statusPill(job.status)}</td>
+          <td>${age}</td>
+          <td>${size}</td>
+          <td style="white-space:nowrap;display:flex;gap:0.4rem;align-items:center;">
+            ${canCancel ? `<button class="btn-cancel" onclick="cancelJob('${job.job_id}', this)">✕ Cancel</button>` : ''}
+            ${canPurge  ? `<button class="btn-purge"  onclick="purgeJob('${job.job_id}', this)">⊗ Purge</button>` : ''}
+          </td>
+        </tr>`;
+    }).join('');
+
+    wrap.innerHTML = `
+      <table class="jobs-table">
+        <thead>
+          <tr>
+            <th>Job ID</th>
+            <th>Status</th>
+            <th>Age</th>
+            <th>File Size</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  }
+
+  async function cancelJob(jobId, btn) {
+    btn.disabled = true;
+    btn.textContent = '…';
+    try {
+      const res = await fetch(authUrl('/video-cancel/' + jobId), { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert('Cancel failed: ' + (data.error || res.status));
+        btn.disabled = false;
+        btn.textContent = '✕ Cancel';
+        return;
+      }
+    } catch (e) {
+      alert('Cancel error: ' + e.message);
+      btn.disabled = false;
+      btn.textContent = '✕ Cancel';
+      return;
+    }
+    await fetchJobs();
+    doFetch();
+  }
+
+  async function purgeJob(jobId, btn) {
+    btn.disabled = true;
+    btn.textContent = '…';
+    try {
+      const res = await fetch(authUrl('/video-jobs/' + jobId), { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert('Purge failed: ' + (data.error || res.status));
+        btn.disabled = false;
+        btn.textContent = '⊗ Purge';
+        return;
+      }
+    } catch (e) {
+      alert('Purge error: ' + e.message);
+      btn.disabled = false;
+      btn.textContent = '⊗ Purge';
+      return;
+    }
+    await fetchJobs();
+    doFetch();
+  }
+
+  function startAutoRefreshCombined() {
+    clearInterval(intervalHandle);
+    countdown = refreshInterval / 1000;
+    intervalHandle = setInterval(() => {
+      countdown--;
+      countdownEl.textContent = 'next in ' + countdown + 's';
+      if (countdown <= 0) {
+        doFetch();
+        fetchJobs();
+        countdown = refreshInterval / 1000;
+      }
+    }, 1000);
+  }
+
+  // Override the manual refresh button to also refresh jobs
+  document.querySelector('.btn-refresh').addEventListener('click', () => {
+    fetchJobs();
+  }, { capture: true });
+
+  fetchJobs();
+  startAutoRefreshCombined();
 </script>
 </body>
 </html>
