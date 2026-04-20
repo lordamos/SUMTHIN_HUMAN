@@ -6,6 +6,7 @@ import ImageInspector from './ImageInspector';
 import DetailedAnalysisItem from './DetailedAnalysisItem';
 import ColorPaletteView from './ColorPaletteView';
 import TagsView from './TagsView';
+import { md } from '../../utils/md';
 import Gauge from '../Gauge';
 import Spinner from '../Spinner';
 import ErrorDisplay from '../ErrorDisplay';
@@ -498,9 +499,7 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({
                                         </button>
                                     </div>
                                 </div>
-                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-sm text-gray-300 leading-relaxed">
-                                    {item.description}
-                                </div>
+                                <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-sm text-gray-300 leading-relaxed" dangerouslySetInnerHTML={md(item.description!)} />
                             </motion.div>
                         )}
 
@@ -533,9 +532,7 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({
                                         {item.isPromptCopied ? 'Copied' : 'Copy'}
                                     </button>
                                 </div>
-                                <div className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/20 text-sm text-gray-200 leading-relaxed italic">
-                                    {item.promptResult}
-                                </div>
+                                <div className="p-4 rounded-xl bg-violet-500/10 border border-violet-500/20 text-sm text-gray-200 leading-relaxed italic" dangerouslySetInnerHTML={md(item.promptResult!)} />
                             </motion.div>
                         )}
 
@@ -546,7 +543,7 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({
                                     <span className="text-xl font-black text-white">{item.styleResult.style}</span>
                                     <span className={`text-sm font-bold px-2 py-1 rounded-lg ${item.styleResult.confidence >= 70 ? 'bg-teal-500/20 text-teal-300' : item.styleResult.confidence >= 40 ? 'bg-amber-500/20 text-amber-300' : 'bg-white/10 text-gray-400'}`}>{item.styleResult.confidence}% confident</span>
                                 </div>
-                                <p className="text-sm text-gray-300 leading-relaxed">{item.styleResult.reasoning}</p>
+                                <div className="text-sm text-gray-300 leading-relaxed" dangerouslySetInnerHTML={md(item.styleResult.reasoning)} />
                                 {item.styleResult.alternates && item.styleResult.alternates.length > 0 && (
                                     <div className="flex gap-2 flex-wrap">
                                         <span className="text-xs text-gray-500">Also could be:</span>

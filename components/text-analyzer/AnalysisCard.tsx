@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { TextAnalysisItem } from '../../types';
 import { ClipboardIcon, CheckIcon, ImplementIcon } from '../Icons';
 import TTSButton from './TTSButton';
+import { md } from '../../utils/md';
 
 interface Props {
     item: TextAnalysisItem;
@@ -43,13 +44,13 @@ const AnalysisCard: React.FC<Props> = ({ item, onImplementSuggestion, onTTS, cur
                                 </span>
                                 <TTSButton text={item.reason} id={`reason-${cardIndex}`} currentPlaying={currentAudio} onPlay={onTTS} />
                             </h4>
-                            <p className="text-sm text-teal-200/90 leading-relaxed pr-8">{item.reason}</p>
+                            <div className="text-sm text-teal-200/90 leading-relaxed pr-8" dangerouslySetInnerHTML={md(item.reason)} />
                         </div>
                     </div>
                     {item.context && (
                         <div className="border-t border-teal-800/50 pt-3">
                             <h4 className="font-semibold text-gray-300 text-xs mb-1">Context</h4>
-                            <p className="text-sm text-gray-400 italic">{item.context}</p>
+                            <div className="text-sm text-gray-400 italic" dangerouslySetInnerHTML={md(item.context)} />
                         </div>
                     )}
                     <div>
@@ -62,9 +63,10 @@ const AnalysisCard: React.FC<Props> = ({ item, onImplementSuggestion, onTTS, cur
                                     animate={{ opacity: 1, x: 0 }}
                                     className="flex items-start justify-between gap-2 p-2 rounded-lg bg-white/5 border border-white/10 hover:border-teal-400/30 transition-colors group"
                                 >
-                                    <p className="text-sm text-gray-200 flex-1 break-words">
-                                        <span className="font-bold text-teal-400 mr-1">{index + 1}.</span> {suggestion}
-                                    </p>
+                                    <div className="text-sm text-gray-200 flex-1 break-words">
+                                        <span className="font-bold text-teal-400 mr-1">{index + 1}.</span>
+                                        <span dangerouslySetInnerHTML={md(suggestion)} />
+                                    </div>
                                     <div className="flex gap-1.5 flex-shrink-0">
                                         <TTSButton text={suggestion} id={`sugg-${cardIndex}-${index}`} currentPlaying={currentAudio} onPlay={onTTS} />
                                         <button onClick={() => handleCopySuggestion(suggestion, index)} className="p-1.5 rounded-md text-gray-400 hover:text-white transition-colors">

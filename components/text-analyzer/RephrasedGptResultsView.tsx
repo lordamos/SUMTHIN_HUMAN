@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ClipboardIcon, CheckIcon } from '../Icons';
 import TTSButton from './TTSButton';
+import { md } from '../../utils/md';
 
 interface Props {
     results: string[];
@@ -31,9 +32,10 @@ const RephrasedGptResultsView: React.FC<Props> = ({ results, onTTS, currentAudio
                         transition={{ duration: 0.2, delay: index * 0.05 }}
                         className="p-4 rounded-2xl bg-black/20 border border-white/10 flex justify-between items-center gap-4 hover:border-teal-400/30 transition-colors"
                     >
-                        <p className="text-gray-200 whitespace-pre-wrap font-sans text-base leading-relaxed flex-1">
-                            <span className="font-bold text-teal-400 mr-2">{index + 1}.</span> {result}
-                        </p>
+                        <div className="text-gray-200 font-sans text-base flex-1 min-w-0">
+                            <span className="font-bold text-teal-400 mr-2">{index + 1}.</span>
+                            <span dangerouslySetInnerHTML={md(result)} />
+                        </div>
                         <div className="flex gap-2 shrink-0">
                             <TTSButton text={result} id={`rephrase-${index}`} currentPlaying={currentAudio} onPlay={onTTS} />
                             <button

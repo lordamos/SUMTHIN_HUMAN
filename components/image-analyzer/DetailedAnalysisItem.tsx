@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { ImageAnalysisItem } from '../../types';
+import { md } from '../../utils/md';
 
 interface Props {
     item: ImageAnalysisItem;
@@ -21,7 +22,7 @@ const DetailedAnalysisItem: React.FC<Props> = ({ item }) => {
             </button>
             {isOpen && (
                 <div className="px-4 pb-4 space-y-3 border-t border-white/10 bg-white/[0.02]">
-                    <p className="text-sm text-gray-400 pt-3 leading-relaxed">{item.reason}</p>
+                    <div className="text-sm text-gray-400 pt-3 leading-relaxed" dangerouslySetInnerHTML={md(item.reason)} />
                     {item.suggestions?.length > 0 && (
                         <div>
                             <p className="text-xs font-semibold text-teal-400 mb-2">Suggestions</p>
@@ -29,7 +30,7 @@ const DetailedAnalysisItem: React.FC<Props> = ({ item }) => {
                                 {item.suggestions.map((s, i) => (
                                     <li key={i} className="text-xs text-gray-300 flex gap-2">
                                         <span className="text-teal-500 font-bold flex-shrink-0">{i + 1}.</span>
-                                        {s}
+                                        <span dangerouslySetInnerHTML={md(s)} />
                                     </li>
                                 ))}
                             </ul>
