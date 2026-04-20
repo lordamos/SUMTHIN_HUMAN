@@ -9,6 +9,9 @@ export default defineConfig(({ mode }) => {
         port: 5000,
         host: '0.0.0.0',
         allowedHosts: true,
+        watch: {
+          ignored: ['**/.pythonlibs/**', '**/node_modules/**'],
+        },
         proxy: {
           '/api': {
             target: 'http://localhost:8000',
@@ -37,6 +40,7 @@ export default defineConfig(({ mode }) => {
           '/video-cancel': { target: 'http://localhost:8000', changeOrigin: true },
           '/video-result': { target: 'http://localhost:8000', changeOrigin: true },
           '/webcam-swap': { target: 'http://localhost:8000', changeOrigin: true },
+          '/generate': { target: 'http://localhost:8000', changeOrigin: true },
           '/health': { target: 'http://localhost:8000', changeOrigin: true },
         },
       },

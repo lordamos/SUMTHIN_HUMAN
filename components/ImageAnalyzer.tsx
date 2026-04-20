@@ -8,13 +8,14 @@ import ImageEditor from './ImageEditor';
 import type { BatchItem, LoadingAction } from './image-analyzer/types';
 import BatchItemCard from './image-analyzer/BatchItemCard';
 import VideoSwapPanel from './image-analyzer/VideoSwapPanel';
+import GeneratePanel from './image-analyzer/GeneratePanel';
 import UploadZone from './image-analyzer/UploadZone';
 import BatchToolbar from './image-analyzer/BatchToolbar';
 
 const generateId = () => Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
 
 const ImageAnalyzer: React.FC = () => {
-    const [mainMode, setMainMode] = useState<'image' | 'video'>('image');
+    const [mainMode, setMainMode] = useState<'image' | 'video' | 'generate'>('image');
     const [items, setItems] = useState<BatchItem[]>([]);
     const [isDragActive, setIsDragActive] = useState(false);
     const [globalError, setGlobalError] = useState<string | null>(null);
@@ -288,6 +289,7 @@ const ImageAnalyzer: React.FC = () => {
             <div className="flex rounded-2xl overflow-hidden border border-white/[0.07] bg-black/30 p-1 gap-1">
                 <button onClick={() => setMainMode('image')} className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${mainMode === 'image' ? 'bg-teal-500/25 text-teal-300 border border-teal-500/30' : 'text-gray-500 hover:text-gray-300'}`}>🖼 Image Mode</button>
                 <button onClick={() => setMainMode('video')} className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${mainMode === 'video' ? 'bg-purple-500/25 text-purple-300 border border-purple-500/30' : 'text-gray-500 hover:text-gray-300'}`}>🎬 Video &amp; Live</button>
+                <button onClick={() => setMainMode('generate')} className={`flex-1 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${mainMode === 'generate' ? 'bg-fuchsia-500/25 text-fuchsia-300 border border-fuchsia-500/30' : 'text-gray-500 hover:text-gray-300'}`}>✨ Generate</button>
             </div>
 
             <AnimatePresence mode="wait">
@@ -295,6 +297,12 @@ const ImageAnalyzer: React.FC = () => {
                     <motion.div key="video-panel" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
                         className="rounded-3xl p-5" style={{ background: 'linear-gradient(145deg, rgba(12,12,22,0.97), rgba(6,6,14,0.99))', border: '1px solid rgba(255,255,255,0.07)' }}>
                         <VideoSwapPanel />
+                    </motion.div>
+                )}
+                {mainMode === 'generate' && (
+                    <motion.div key="generate-panel" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+                        className="rounded-3xl p-5" style={{ background: 'linear-gradient(145deg, rgba(12,12,22,0.97), rgba(6,6,14,0.99))', border: '1px solid rgba(255,255,255,0.07)' }}>
+                        <GeneratePanel />
                     </motion.div>
                 )}
             </AnimatePresence>

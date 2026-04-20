@@ -1045,5 +1045,84 @@ def video_jobs_stats():
     })
 
 
+@app.route("/generate/image", methods=["POST"])
+def generate_image():
+    """
+    Generate images from a text prompt using Replicate (flux-schnell).
+    Body JSON: { prompt, aspect_ratio?, num_outputs? }
+    Returns: { urls: [str] }
+    """
+    try:
+        import replicate as _replicate
+        data = request.json or {}
+        prompt = (data.get("prompt") or "").strip()
+        if not prompt:
+            return jsonify({"error": "prompt is required"}), 400
+        aspect_ratio = data.get("aspect_ratio", "1:1")
+        num_outputs = int(data.get("num_outputs", 1))
+        num_outputs = max(1, min(4, num_outputs))
+
+        output = _replicate.run(
+            "black-forest-labs/flux-schnell",
+            input={
+                "prompt": prompt,
+                "aspect_ratio": aspect_ratio,
+                "num_outputs": num_outputs,
+                "output_format": "webp",
+                "output_quality": 90,
+            },
+        )
+        urls = [str(item) for item in output]
+        return jsonify({"urls": urls})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/generate/video", methods=["POST"])
+def generate_video():
+    """
+    Start an async video generation using Replicate (wan-2.1-t2v-480p).
+    Body JSON: { prompt }
+    Returns: { job_id: str, status: str }
+    """
+    try:
+        import replicate as _replicate
+        data = request.json or {}
+        prompt = (data.get("prompt") or "").strip()
+        if not prompt:
+            return jsonify({"error": "prompt is required"}), 400
+
+        prediction = _replicate.predictions.create(
+            model="wavespeedai/wan-2.1-t2v-480p",
+            input={"prompt": prompt},
+        )
+        return jsonify({"job_id": prediction.id, "status": prediction.status})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/generate/video/<job_id>", methods=["GET"])
+def get_generated_video(job_id: str):
+    """
+    Poll the status of a video generation job.
+    Returns: { status: str, url?: str, error?: str }
+    """
+    try:
+        import replicate as _replicate
+        prediction = _replicate.predictions.get(job_id)
+        result: dict = {"status": prediction.status}
+        if prediction.status == "succeeded":
+            output = prediction.output
+            if isinstance(output, list) and output:
+                result["url"] = str(output[0])
+            elif output:
+                result["url"] = str(output)
+        elif prediction.status in ("failed", "canceled"):
+            result["error"] = str(prediction.error or "Generation failed.")
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 if __name__ == "__main__":
     app.run(host="localhost", port=8000, threaded=True)

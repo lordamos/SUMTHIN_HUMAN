@@ -7,6 +7,7 @@
 - `components/ImageAnalyzer.tsx` — Image batch processing with:
   - **Image Mode** — Upload images, analyze, describe, tag, face swap, outfit swap, batch edit
   - **Video & Live Mode** — Video face swap + real-time webcam face swap
+  - **Generate Mode** — AI image & video generation via Replicate API
 - `components/TextAnalyzer.tsx` — Text humanizer + AI detection
 - `components/ImageEditor.tsx` — Magic editor (Gemini-powered)
 - `components/image-analyzer/` — Image sub-components:
@@ -34,7 +35,11 @@
   - `/face-swap`, `/face-swap-multi` — InsightFace face swap
   - `/outfit-swap` — Texture or AI-prompt outfit swap
   - `/video-face-swap` — Frame-by-frame video face swap (returns .mp4)
-  - `/webcam-swap` — Live MJPEG webcam stream with face swap
+  - `/webcam-swap/session` — Create/delete browser webcam session for live face swap
+  - `/webcam-swap/frame` — Single-frame face swap (POST JPEG, returns JPEG)
+  - `/generate/image` — Text-to-image via Replicate (flux-schnell)
+  - `/generate/video` — Text-to-video via Replicate (wan-2.1-t2v-480p), async
+  - `/generate/video/<job_id>` — Poll video generation status
 - `backend/ai_edit_engine.py` — InsightFace engine (face swap, outfit swap, realism boost)
 - `backend/video_engine.py` — Video face swap engine (OpenCV + MoviePy)
 
