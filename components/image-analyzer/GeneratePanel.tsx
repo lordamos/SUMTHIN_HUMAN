@@ -1,8 +1,8 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { generateImages } from '../../services/geminiService';
 
 type GenMode = 'image' | 'video';
+type ImageSize = '1024x1024' | '1280x720' | '720x1280';
 
 interface GeneratedImage {
     id: string;
@@ -31,6 +31,7 @@ const GeneratePanel: React.FC = () => {
     const [genMode, setGenMode] = useState<GenMode>('image');
 
     const [imgPrompt, setImgPrompt] = useState('');
+    const [imageSize, setImageSize] = useState<ImageSize>('1024x1024');
     const [numOutputs, setNumOutputs] = useState(1);
     const [imgLoading, setImgLoading] = useState(false);
     const [imgError, setImgError] = useState<string | null>(null);
@@ -54,8 +55,19 @@ const GeneratePanel: React.FC = () => {
         setImgLoading(true);
         setImgError(null);
         try {
-            const dataUrls = await generateImages(imgPrompt.trim(), numOutputs);
-            const newImages: GeneratedImage[] = dataUrls.map(url => ({
+            const res = await fetch('/generate/image', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt: imgPrompt.trim(),
+                    num_outputs: numOutputs,
+                    image_size: imageSize,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+            const urls: string[] = data.urls;
+            const newImages: GeneratedImage[] = urls.map(url => ({
                 id: Math.random().toString(36).slice(2),
                 url,
                 prompt: imgPrompt.trim(),
@@ -127,13 +139,22 @@ const GeneratePanel: React.FC = () => {
         }
     };
 
-    const handleDownloadImage = (url: string, index: number) => {
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `generated-image-${index + 1}.png`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+    const handleDownloadImage = async (url: string, index: number) => {
+        try {
+            const resp = await fetch(url);
+            const blob = await resp.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = objectUrl;
+            const ext = blob.type.includes('png') ? 'png' : blob.type.includes('webp') ? 'webp' : 'jpg';
+            a.download = `generated-image-${index + 1}.${ext}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(objectUrl);
+        } catch {
+            window.open(url, '_blank');
+        }
     };
 
     return (
@@ -166,7 +187,22 @@ const GeneratePanel: React.FC = () => {
                                 className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-fuchsia-500/50 resize-none"
                                 onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleGenerateImage(); }}
                             />
-                            <p className="text-[9px] text-gray-600 mt-1">Powered by Gemini · Free · ~5-10 seconds per image</p>
+                            <p className="text-[9px] text-gray-600 mt-1">Powered by SiliconFlow · FLUX.1-schnell · Free</p>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Aspect Ratio</label>
+                            <div className="flex gap-1.5">
+                                {([['1:1', '1024x1024'], ['16:9', '1280x720'], ['9:16', '720x1280']] as const).map(([label, size]) => (
+                                    <button
+                                        key={size}
+                                        onClick={() => setImageSize(size)}
+                                        className={`px-3 py-1 rounded-lg text-[10px] font-bold border transition-all ${imageSize === size ? 'border-fuchsia-500/60 bg-fuchsia-500/20 text-fuchsia-300' : 'border-white/10 bg-white/5 text-gray-400 hover:text-gray-200 hover:border-white/20'}`}
+                                    >
+                                        {label}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
 
                         <div>

@@ -1114,31 +1114,45 @@ def video_jobs_stats():
 @app.route("/generate/image", methods=["POST"])
 def generate_image():
     """
-    Generate images from a text prompt using Replicate (flux-schnell).
-    Body JSON: { prompt, aspect_ratio?, num_outputs? }
+    Generate images from a text prompt using SiliconFlow (FLUX.1-schnell, free tier).
+    Body JSON: { prompt, num_outputs?, image_size? }
     Returns: { urls: [str] }
     """
     try:
-        import replicate as _replicate
+        import requests as _requests
+        api_key = os.environ.get("SILICONFLOW_API_KEY", "")
+        if not api_key:
+            return jsonify({"error": "SILICONFLOW_API_KEY is not configured"}), 500
+
         data = request.json or {}
         prompt = (data.get("prompt") or "").strip()
         if not prompt:
             return jsonify({"error": "prompt is required"}), 400
-        aspect_ratio = data.get("aspect_ratio", "1:1")
-        num_outputs = int(data.get("num_outputs", 1))
-        num_outputs = max(1, min(4, num_outputs))
+        num_outputs = max(1, min(4, int(data.get("num_outputs", 1))))
+        image_size = data.get("image_size", "1024x1024")
 
-        output = _replicate.run(
-            "black-forest-labs/flux-schnell",
-            input={
-                "prompt": prompt,
-                "aspect_ratio": aspect_ratio,
-                "num_outputs": num_outputs,
-                "output_format": "webp",
-                "output_quality": 90,
-            },
-        )
-        urls = [str(item) for item in output]
+        urls = []
+        for _ in range(num_outputs):
+            resp = _requests.post(
+                "https://api.siliconflow.cn/v1/images/generations",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "black-forest-labs/FLUX.1-schnell",
+                    "prompt": prompt,
+                    "image_size": image_size,
+                    "n": 1,
+                },
+                timeout=60,
+            )
+            resp.raise_for_status()
+            result = resp.json()
+            for img in result.get("images", []):
+                if img.get("url"):
+                    urls.append(img["url"])
+
         return jsonify({"urls": urls})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
