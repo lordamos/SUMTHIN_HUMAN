@@ -1037,16 +1037,57 @@ const VideoSwapPanel: React.FC = () => {
                                             { label: '30 min', value: 30 * 60 },
                                         ].map(({ label, value }) => {
                                             const active = warningThreshold === value;
+                                            const wouldWarn = value !== null && videoDuration !== null && videoDuration > value;
+                                            const wouldNotWarn = value !== null && videoDuration !== null && videoDuration <= value;
+                                            const inactiveStyle = wouldWarn
+                                                    ? 'border-amber-500/30 bg-amber-500/8 text-amber-400/70 hover:text-amber-300 hover:border-amber-500/50'
+                                                    : wouldNotWarn
+                                                    ? 'border-emerald-500/30 bg-emerald-500/8 text-emerald-400/70 hover:text-emerald-300 hover:border-emerald-500/50'
+                                                    : 'border-white/10 bg-white/5 text-gray-400 hover:text-gray-200 hover:border-white/20';
                                             return (
                                                 <button
                                                     key={label}
                                                     onClick={() => applyThreshold(value)}
-                                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${active ? 'border-amber-500/60 bg-amber-500/20 text-amber-300' : 'border-white/10 bg-white/5 text-gray-400 hover:text-gray-200 hover:border-white/20'}`}
+                                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all flex items-center gap-1 ${active ? 'border-amber-500/60 bg-amber-500/20 text-amber-300' : inactiveStyle}`}
                                                 >
                                                     {label}
+                                                    {wouldWarn && (
+                                                        <span title="Your video would trigger this warning" className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0 inline-block" />
+                                                    )}
+                                                    {wouldNotWarn && (
+                                                        <span title="Your video is within this limit" className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0 inline-block" />
+                                                    )}
                                                 </button>
                                             );
                                         })}
+                                    </div>
+                                    {/* Live preview note */}
+                                    <div className="mt-2">
+                                        {videoDuration !== null && warningThreshold !== null ? (
+                                            videoDuration > warningThreshold ? (
+                                                <p className="text-[10px] text-amber-400/90">
+                                                    ⚠ Your current video ({formatDuration(videoDuration)}) would trigger this warning.
+                                                </p>
+                                            ) : (
+                                                <p className="text-[10px] text-emerald-400/90">
+                                                    ✓ Your current video ({formatDuration(videoDuration)}) is within the {formatDuration(warningThreshold)} limit — no warning will appear.
+                                                </p>
+                                            )
+                                        ) : videoDuration !== null && warningThreshold === null ? (
+                                            <p className="text-[10px] text-gray-500">
+                                                Warning is disabled — no alert will appear regardless of video length.
+                                            </p>
+                                        ) : warningThreshold !== null ? (
+                                            <p className="text-[10px] text-gray-500">
+                                                Videos over {formatDuration(warningThreshold)} will show a warning before processing.
+                                                <span className="ml-1 text-amber-400/60">● would warn</span>
+                                                <span className="ml-1.5 text-emerald-400/60">● within limit</span>
+                                            </p>
+                                        ) : (
+                                            <p className="text-[10px] text-gray-500">
+                                                Warning is disabled — pick a threshold to enable it.
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">
