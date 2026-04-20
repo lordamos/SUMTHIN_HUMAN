@@ -11,6 +11,43 @@ interface JobStats {
     processing_fps?: number;
 }
 
+interface RecentJob {
+    id: string;
+    status: 'running' | 'done' | 'error' | 'cancelled' | 'unknown';
+    timestamp: number;
+}
+
+const STORAGE_KEY_RECENT_JOBS = 'recentVideoJobIds';
+const MAX_RECENT_JOBS = 5;
+
+const VALID_STATUSES: ReadonlySet<RecentJob['status']> = new Set(['running', 'done', 'error', 'cancelled', 'unknown']);
+
+function loadRecentJobs(): RecentJob[] {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY_RECENT_JOBS);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter(
+            (j): j is RecentJob =>
+                j !== null &&
+                typeof j === 'object' &&
+                typeof j.id === 'string' &&
+                j.id.length > 0 &&
+                VALID_STATUSES.has(j.status) &&
+                typeof j.timestamp === 'number'
+        );
+    } catch {
+        return [];
+    }
+}
+
+function saveRecentJobs(jobs: RecentJob[]): void {
+    try {
+        localStorage.setItem(STORAGE_KEY_RECENT_JOBS, JSON.stringify(jobs));
+    } catch { /* ignore */ }
+}
+
 function formatBytes(bytes: number): string {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -110,6 +147,25 @@ const VideoSwapPanel: React.FC = () => {
         } catch { /* ignore */ }
     };
 
+    const [recentJobs, setRecentJobs] = useState<RecentJob[]>(() => loadRecentJobs());
+
+    const upsertRecentJob = (id: string, status: RecentJob['status']) => {
+        setRecentJobs(prev => {
+            const without = prev.filter(j => j.id !== id);
+            const updated: RecentJob[] = [{ id, status, timestamp: Date.now() }, ...without].slice(0, MAX_RECENT_JOBS);
+            saveRecentJobs(updated);
+            return updated;
+        });
+    };
+
+    const removeRecentJob = (id: string) => {
+        setRecentJobs(prev => {
+            const updated = prev.filter(j => j.id !== id);
+            saveRecentJobs(updated);
+            return updated;
+        });
+    };
+
     // Job lookup state
     const [lookupOpen, setLookupOpen] = useState(false);
     const [lookupInput, setLookupInput] = useState('');
@@ -149,13 +205,14 @@ const VideoSwapPanel: React.FC = () => {
         lookupPollRef.current = setInterval(async () => {
             try {
                 const res = await fetch(`/video-progress/${id}`);
-                if (!res.ok) { stopLookupPolling(); setLookupStatus('not_found'); return; }
+                if (!res.ok) { stopLookupPolling(); setLookupStatus('not_found'); removeRecentJob(id); return; }
                 const data = await res.json();
                 setLookupProgress(data.progress ?? 0);
                 setLookupFrameInfo({ current: data.frame ?? 0, total: data.total ?? 0 });
                 if (data.status === 'done') {
                     stopLookupPolling();
                     setLookupStatus('done');
+                    upsertRecentJob(id, 'done');
                     try {
                         const resultRes = await fetch(`/video-result/${id}`);
                         if (!resultRes.ok) throw new Error('Failed to fetch result.');
@@ -169,17 +226,20 @@ const VideoSwapPanel: React.FC = () => {
                     stopLookupPolling();
                     setLookupStatus('error');
                     setLookupError(data.error || 'Processing failed.');
+                    upsertRecentJob(id, 'error');
                 } else if (data.status === 'cancelled') {
                     stopLookupPolling();
                     setLookupStatus('cancelled');
+                    upsertRecentJob(id, 'cancelled');
                 }
             } catch { /* transient network error — keep polling */ }
         }, 1500);
     };
 
-    const handleLookup = async () => {
-        const id = lookupInput.trim();
+    const handleLookup = async (overrideId?: string) => {
+        const id = (overrideId ?? lookupInput).trim();
         if (!id) return;
+        if (overrideId) setLookupInput(overrideId);
         stopLookupPolling();
         setLookupStatus('loading');
         setLookupBlobUrl(null);
@@ -188,26 +248,31 @@ const VideoSwapPanel: React.FC = () => {
         setLookupFrameInfo({ current: 0, total: 0 });
         try {
             const res = await fetch(`/video-progress/${id}`);
-            if (!res.ok) { setLookupStatus('not_found'); return; }
+            if (!res.ok) { setLookupStatus('not_found'); removeRecentJob(id); return; }
             const data = await res.json();
             setLookupProgress(data.progress ?? 0);
             setLookupFrameInfo({ current: data.frame ?? 0, total: data.total ?? 0 });
             if (data.status === 'done') {
                 setLookupStatus('done');
+                upsertRecentJob(id, 'done');
                 const resultRes = await fetch(`/video-result/${id}`);
                 if (!resultRes.ok) { setLookupStatus('error'); setLookupError('Job finished but file could not be retrieved.'); return; }
                 const blob = await resultRes.blob();
                 setLookupBlobUrl(URL.createObjectURL(blob));
             } else if (data.status === 'running' || data.status === 'queued') {
                 setLookupStatus('running');
+                upsertRecentJob(id, 'running');
                 startLookupPolling(id);
             } else if (data.status === 'error') {
                 setLookupStatus('error');
                 setLookupError(data.error || 'Processing failed.');
+                upsertRecentJob(id, 'error');
             } else if (data.status === 'cancelled') {
                 setLookupStatus('cancelled');
+                upsertRecentJob(id, 'cancelled');
             } else {
                 setLookupStatus('not_found');
+                removeRecentJob(id);
             }
         } catch {
             setLookupStatus('not_found');
@@ -241,6 +306,7 @@ const VideoSwapPanel: React.FC = () => {
                     setIsProcessing(false);
                     setCompletedJobId(id);
                     setJobId(null);
+                    upsertRecentJob(id, 'done');
                     fetchStats();
                     // Fetch the result video
                     try {
@@ -260,12 +326,14 @@ const VideoSwapPanel: React.FC = () => {
                     setJobId(null);
                     setProgress(0);
                     setFrameInfo({ current: 0, total: 0 });
+                    upsertRecentJob(id, 'cancelled');
                     fetchStats();
                 } else if (data.status === 'error') {
                     stopPolling();
                     setIsProcessing(false);
                     setJobId(null);
                     setVideoError(data.error || 'Processing failed.');
+                    upsertRecentJob(id, 'error');
                     fetchStats();
                 }
             } catch {
@@ -360,6 +428,7 @@ const VideoSwapPanel: React.FC = () => {
             }
             const { job_id } = await res.json();
             setJobId(job_id);
+            upsertRecentJob(job_id, 'running');
             startPolling(job_id);
             fetchStats();
         } catch (err) {
@@ -377,6 +446,7 @@ const VideoSwapPanel: React.FC = () => {
         setJobId(null);
         setProgress(0);
         setFrameInfo({ current: 0, total: 0 });
+        upsertRecentJob(id, 'cancelled');
         // Fire-and-forget cancel request to stop the backend job
         fetch(`/video-cancel/${id}`, { method: 'DELETE' }).catch(() => {});
         fetchStats();
@@ -768,6 +838,48 @@ const VideoSwapPanel: React.FC = () => {
                                 exit={{ opacity: 0, height: 0 }}
                                 className="px-3 pb-3 space-y-2.5"
                             >
+                                {recentJobs.length > 0 && (
+                                    <div className="space-y-1">
+                                        <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider">Recent jobs</p>
+                                        {recentJobs.map(job => {
+                                            const statusColor: Record<RecentJob['status'], string> = {
+                                                done: 'text-cyan-400',
+                                                running: 'text-emerald-400',
+                                                error: 'text-red-400',
+                                                cancelled: 'text-yellow-400',
+                                                unknown: 'text-gray-500',
+                                            };
+                                            const statusLabel: Record<RecentJob['status'], string> = {
+                                                done: 'done',
+                                                running: 'running',
+                                                error: 'error',
+                                                cancelled: 'cancelled',
+                                                unknown: '?',
+                                            };
+                                            return (
+                                                <div key={job.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/8">
+                                                    <span className={`text-[9px] font-bold uppercase shrink-0 ${statusColor[job.status]}`}>{statusLabel[job.status]}</span>
+                                                    <span className="flex-1 font-mono text-[10px] text-gray-300 truncate">{job.id}</span>
+                                                    {job.status === 'done' && (
+                                                        <a
+                                                            href={`/video-result/${job.id}`}
+                                                            download="face_swapped.mp4"
+                                                            className="text-[10px] shrink-0 px-2 py-0.5 rounded bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/30 text-teal-300 hover:text-teal-200 transition-colors"
+                                                        >
+                                                            ⬇ Download
+                                                        </a>
+                                                    )}
+                                                    <button
+                                                        onClick={() => { if (!lookupOpen) setLookupOpen(true); handleLookup(job.id); }}
+                                                        className="text-[10px] shrink-0 px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-gray-200 transition-colors"
+                                                    >
+                                                        Load
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                                 <p className="text-[10px] text-gray-500">Paste your job ID below to check the status or download your result.</p>
                                 <div className="flex gap-2">
                                     <input
@@ -779,7 +891,7 @@ const VideoSwapPanel: React.FC = () => {
                                         className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-emerald-500/50"
                                     />
                                     <button
-                                        onClick={handleLookup}
+                                        onClick={() => handleLookup()}
                                         disabled={!lookupInput.trim() || lookupStatus === 'loading'}
                                         className="px-3 py-2 rounded-lg text-xs font-black border border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 transition-all disabled:opacity-40"
                                     >
