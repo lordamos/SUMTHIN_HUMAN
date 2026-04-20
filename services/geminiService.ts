@@ -12,6 +12,28 @@ const safetySettings = [
 ];
 
 /**
+ * Resize an image to at most maxPx on its longest side before sending to the
+ * Gemini API.  Smaller images are returned unchanged.  The output is always
+ * JPEG (quality 0.85) to minimise payload size and latency.
+ */
+async function resizeForApi(base64: string, mimeType: string, maxPx = 1024): Promise<{ data: string; mime: string }> {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+            const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+            if (scale >= 1) { resolve({ data: base64, mime: mimeType }); return; }
+            const canvas = document.createElement('canvas');
+            canvas.width  = Math.round(img.width  * scale);
+            canvas.height = Math.round(img.height * scale);
+            canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve({ data: canvas.toDataURL('image/jpeg', 0.85).split(',')[1], mime: 'image/jpeg' });
+        };
+        img.onerror = () => resolve({ data: base64, mime: mimeType });
+        img.src = `data:${mimeType};base64,${base64}`;
+    });
+}
+
+/**
  * Helper to handle API rate limits (429) with exponential backoff
  */
 async function generateWithRetry(fn: () => Promise<any>, maxRetries = 3): Promise<any> {
@@ -244,10 +266,11 @@ Also score these four categories 0–100 (higher = more AI-like):
 - Edge Naturalness: whether borders between objects have natural imperfections
 - Noise & Grain: whether the image has realistic sensor noise or is suspiciously clean`;
 
+    const img = await resizeForApi(base64Image, mimeType);
     return generateWithRetry(async () => {
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: { parts: [{ text: prompt }, { inlineData: { data: base64Image, mimeType } }] },
+            model: 'gemini-2.0-flash',
+            contents: { parts: [{ text: prompt }, { inlineData: { data: img.data, mimeType: img.mime } }] },
             config: {
                 responseMimeType: "application/json",
                 responseSchema: {
@@ -289,10 +312,11 @@ Also score these four categories 0–100 (higher = more AI-like):
 }
 
 export async function describeImage(base64Image: string, mimeType: string): Promise<string> {
+    const img = await resizeForApi(base64Image, mimeType);
     return generateWithRetry(async () => {
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: { parts: [{ text: "Describe this image in detail." }, { inlineData: { data: base64Image, mimeType } }] },
+            model: 'gemini-2.0-flash',
+            contents: { parts: [{ text: "Describe this image in detail." }, { inlineData: { data: img.data, mimeType: img.mime } }] },
             config: { temperature: 0.4, safetySettings },
         });
         return response.text.trim();
@@ -300,10 +324,11 @@ export async function describeImage(base64Image: string, mimeType: string): Prom
 }
 
 export async function generateImageTags(base64Image: string, mimeType: string): Promise<ImageTagsResult> {
+    const img = await resizeForApi(base64Image, mimeType);
     return generateWithRetry(async () => {
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: { parts: [{ text: "Generate keywords for this image." }, { inlineData: { data: base64Image, mimeType } }] },
+            model: 'gemini-2.0-flash',
+            contents: { parts: [{ text: "Generate keywords for this image." }, { inlineData: { data: img.data, mimeType: img.mime } }] },
             config: {
                 responseMimeType: "application/json",
                 responseSchema: {
@@ -327,10 +352,11 @@ export async function generateImageTags(base64Image: string, mimeType: string): 
 }
 
 export async function getDominantColors(base64Image: string, mimeType: string): Promise<DominantColorsResult> {
+    const img = await resizeForApi(base64Image, mimeType, 512);
     return generateWithRetry(async () => {
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: { parts: [{ text: "Extract top 5 colors." }, { inlineData: { data: base64Image, mimeType } }] },
+            model: 'gemini-2.0-flash',
+            contents: { parts: [{ text: "Extract top 5 colors." }, { inlineData: { data: img.data, mimeType: img.mime } }] },
             config: {
                 responseMimeType: "application/json",
                 responseSchema: {
@@ -362,10 +388,11 @@ export async function generateImagePrompt(base64Image: string, mimeType: string)
 
 Include: subject and action, art style and medium, lighting setup, color palette, composition and framing, camera settings (if applicable), mood and atmosphere, and any technical parameters (like "8k", "hyperrealistic", "cinematic"). Format as a single rich paragraph prompt ready to paste into Midjourney, DALL-E, or Stable Diffusion.`;
 
+    const img = await resizeForApi(base64Image, mimeType);
     return generateWithRetry(async () => {
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: { parts: [{ text: instruction }, { inlineData: { data: base64Image, mimeType } }] },
+            model: 'gemini-2.0-flash',
+            contents: { parts: [{ text: instruction }, { inlineData: { data: img.data, mimeType: img.mime } }] },
             config: { temperature: 0.4, safetySettings },
         });
         return response.text.trim();
@@ -375,10 +402,11 @@ Include: subject and action, art style and medium, lighting setup, color palette
 export async function classifyImageStyle(base64Image: string, mimeType: string): Promise<ImageStyleResult> {
     const instruction = `You are an AI image forensics expert. Identify what AI model or generation style this image most resembles, or whether it is a real photograph. Consider: Midjourney, DALL-E, Stable Diffusion, Adobe Firefly, Imagen, or Real Photo. Provide your top match, confidence 0-100, a one-sentence reasoning, and up to 2 alternative possibilities.`;
 
+    const img = await resizeForApi(base64Image, mimeType);
     return generateWithRetry(async () => {
         const response = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: { parts: [{ text: instruction }, { inlineData: { data: base64Image, mimeType } }] },
+            model: 'gemini-2.0-flash',
+            contents: { parts: [{ text: instruction }, { inlineData: { data: img.data, mimeType: img.mime } }] },
             config: {
                 responseMimeType: "application/json",
                 responseSchema: {
