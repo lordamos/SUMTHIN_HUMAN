@@ -56,6 +56,8 @@ const VideoSwapPanel: React.FC = () => {
     const [facePreview, setFacePreview] = useState<string | null>(null);
     const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
     const [videoError, setVideoError] = useState<string | null>(null);
+    const [completedJobId, setCompletedJobId] = useState<string | null>(null);
+    const [copied, setCopied] = useState(false);
 
     const [jobId, setJobId] = useState<string | null>(null);
     const [progress, setProgress] = useState(0);
@@ -237,6 +239,7 @@ const VideoSwapPanel: React.FC = () => {
                 if (data.status === 'done') {
                     stopPolling();
                     setIsProcessing(false);
+                    setCompletedJobId(id);
                     setJobId(null);
                     fetchStats();
                     // Fetch the result video
@@ -341,6 +344,8 @@ const VideoSwapPanel: React.FC = () => {
         setIsProcessing(true);
         setVideoError(null);
         setDownloadUrl(null);
+        setCompletedJobId(null);
+        setCopied(false);
         setProgress(0);
         setFrameInfo({ current: 0, total: 0 });
 
@@ -717,6 +722,30 @@ const VideoSwapPanel: React.FC = () => {
                         >
                             ⬇️ Download Face-Swapped Video
                         </motion.a>
+                    )}
+
+                    {completedJobId && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/8"
+                        >
+                            <span className="text-[10px] text-gray-500 shrink-0">Job ID</span>
+                            <span className="flex-1 font-mono text-[10px] text-gray-300 truncate">{completedJobId}</span>
+                            <button
+                                onClick={() => {
+                                    navigator.clipboard.writeText(completedJobId).then(() => {
+                                        setCopied(true);
+                                        setTimeout(() => setCopied(false), 2000);
+                                    }).catch(() => {});
+                                }}
+                                className="text-[10px] shrink-0 transition-colors px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 border border-white/10"
+                                style={{ color: copied ? '#34d399' : '#9ca3af' }}
+                                title="Copy job ID"
+                            >
+                                {copied ? 'Copied!' : 'Copy'}
+                            </button>
+                        </motion.div>
                     )}
 
                     {/* Job lookup — retrieve a previous result by ID */}
