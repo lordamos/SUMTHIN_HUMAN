@@ -36,6 +36,15 @@ const IMG_PROMPTS = [
     "Surreal floating island with waterfalls in a pastel sky",
 ];
 
+const VIDEO_DURATIONS: { secs: number; label: string; frames: number; wait: string }[] = [
+    { secs: 5,  label: '5s',  frames: 80,  wait: '~1-3 min'  },
+    { secs: 10, label: '10s', frames: 160, wait: '~3-6 min'  },
+    { secs: 20, label: '20s', frames: 320, wait: '~8-15 min' },
+    { secs: 30, label: '30s', frames: 480, wait: '~15-25 min'},
+    { secs: 45, label: '45s', frames: 720, wait: '~25-40 min'},
+    { secs: 60, label: '1 min', frames: 960, wait: '~40-60 min'},
+];
+
 const VIDEO_PROMPTS = [
     "A wolf running through a snowy forest, cinematic slow motion",
     "Drone shot gliding over ocean waves at sunset",
@@ -53,6 +62,7 @@ const GeneratePanel: React.FC = () => {
     const [generatedImages, setGeneratedImages] = useState<GeneratedImage[]>([]);
 
     const [videoPrompt, setVideoPrompt] = useState('');
+    const [videoDurationSecs, setVideoDurationSecs] = useState(5);
     const [videoLoading, setVideoLoading] = useState(false);
     const [videoError, setVideoError] = useState<string | null>(null);
     const [videoJob, setVideoJob] = useState<VideoJob | null>(null);
@@ -124,7 +134,10 @@ const GeneratePanel: React.FC = () => {
             const res = await fetch('/generate/video', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt: videoPrompt.trim() }),
+                body: JSON.stringify({
+                    prompt: videoPrompt.trim(),
+                    num_frames: VIDEO_DURATIONS.find(d => d.secs === videoDurationSecs)?.frames ?? 80,
+                }),
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
@@ -299,7 +312,31 @@ const GeneratePanel: React.FC = () => {
                                 rows={4}
                                 className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-orange-500/50 resize-none"
                             />
-                            <p className="text-[9px] text-gray-600 mt-1">Powered by Wan 2.1 · 480p · ~1-3 min to generate</p>
+                            <p className="text-[9px] text-gray-600 mt-1">Powered by Wan 2.1 · 480p</p>
+                        </div>
+
+                        <div>
+                            <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Duration</label>
+                            <div className="flex gap-1.5 flex-wrap">
+                                {VIDEO_DURATIONS.map(d => (
+                                    <button
+                                        key={d.secs}
+                                        onClick={() => setVideoDurationSecs(d.secs)}
+                                        className={`flex-1 min-w-[52px] py-1.5 rounded-lg text-[10px] font-bold border transition-all ${videoDurationSecs === d.secs ? 'border-orange-500/60 bg-orange-500/20 text-orange-300' : 'border-white/10 bg-white/5 text-gray-400 hover:text-gray-200 hover:border-white/20'}`}
+                                    >
+                                        {d.label}
+                                    </button>
+                                ))}
+                            </div>
+                            {(() => {
+                                const sel = VIDEO_DURATIONS.find(d => d.secs === videoDurationSecs)!;
+                                return (
+                                    <p className="text-[9px] mt-1.5 text-gray-500">
+                                        {sel.frames} frames · est. wait <span className={videoDurationSecs >= 30 ? 'text-orange-400/80' : 'text-gray-500'}>{sel.wait}</span>
+                                        {videoDurationSecs >= 30 && <span className="text-orange-400/70"> — grab a coffee ☕</span>}
+                                    </p>
+                                );
+                            })()}
                         </div>
 
                         {videoError && (
@@ -312,7 +349,7 @@ const GeneratePanel: React.FC = () => {
                             className="w-full py-3 rounded-xl text-sm font-black border border-orange-500/40 transition-all flex items-center justify-center gap-2 disabled:opacity-40"
                             style={{ background: 'linear-gradient(135deg, rgba(249,115,22,0.2), rgba(234,179,8,0.12))' }}
                         >
-                            {videoLoading ? <><Spinner small /> Working…</> : '🎬 Generate Video'}
+                            {videoLoading ? <><Spinner small /> Working…</> : `🎬 Generate ${VIDEO_DURATIONS.find(d => d.secs === videoDurationSecs)?.label ?? ''} Video`}
                         </button>
 
                         {videoJob && (

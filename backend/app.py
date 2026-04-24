@@ -1307,9 +1307,12 @@ def generate_video():
         if not prompt:
             return jsonify({"error": "prompt is required"}), 400
 
+        num_frames = int(data.get("num_frames") or 81)
+        num_frames = max(16, min(num_frames, 960))
+
         prediction = _replicate.predictions.create(
             model="wavespeedai/wan-2.1-t2v-480p",
-            input={"prompt": prompt},
+            input={"prompt": prompt, "num_frames": num_frames},
         )
         return jsonify({"job_id": prediction.id, "status": prediction.status})
     except Exception as e:
