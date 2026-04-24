@@ -66,7 +66,6 @@ const TextAnalyzer: React.FC = () => {
                 lastHumanizedTextRef.current = text;
                 setCorrectedText(result);
                 setRephrasedGptResults(null);
-                navigator.clipboard.writeText(result).catch(() => {});
             } catch {}
             finally { setIsRealtimeHumanizing(false); }
         }, 700);

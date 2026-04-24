@@ -27,6 +27,22 @@ const Spinner: React.FC<{ small?: boolean }> = ({ small }) => (
 );
 
 
+const IMG_PROMPTS = [
+    "Cinematic portrait of a woman in neon-lit rain, shallow depth of field",
+    "Abstract watercolor mountain landscape at golden hour",
+    "Futuristic cyberpunk cityscape from above at night",
+    "Close-up of a wolf in a snowy forest, hyperrealistic",
+    "Vintage film photograph of a busy 1970s New York street",
+    "Surreal floating island with waterfalls in a pastel sky",
+];
+
+const VIDEO_PROMPTS = [
+    "A wolf running through a snowy forest, cinematic slow motion",
+    "Drone shot gliding over ocean waves at sunset",
+    "Time-lapse of clouds rolling over a mountain peak",
+    "Neon-lit rainy city street at night, people walking with umbrellas",
+];
+
 const GeneratePanel: React.FC = () => {
     const [genMode, setGenMode] = useState<GenMode>('image');
 
@@ -167,6 +183,18 @@ const GeneratePanel: React.FC = () => {
                     <motion.div key="img-gen" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
                         <div>
                             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Prompt</label>
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                                {IMG_PROMPTS.map((p, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => setImgPrompt(p)}
+                                        className="px-2 py-1 rounded-lg text-[9px] font-medium border border-white/[0.07] bg-white/[0.03] text-gray-500 hover:text-fuchsia-300 hover:border-fuchsia-500/30 hover:bg-fuchsia-500/5 transition-all truncate max-w-[180px]"
+                                        title={p}
+                                    >
+                                        {p.length > 32 ? p.slice(0, 32) + '…' : p}
+                                    </button>
+                                ))}
+                            </div>
                             <textarea
                                 value={imgPrompt}
                                 onChange={e => setImgPrompt(e.target.value)}
@@ -252,10 +280,22 @@ const GeneratePanel: React.FC = () => {
                     <motion.div key="vid-gen" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
                         <div>
                             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Prompt</label>
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                                {VIDEO_PROMPTS.map((p, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={() => setVideoPrompt(p)}
+                                        className="px-2 py-1 rounded-lg text-[9px] font-medium border border-white/[0.07] bg-white/[0.03] text-gray-500 hover:text-orange-300 hover:border-orange-500/30 hover:bg-orange-500/5 transition-all truncate max-w-[180px]"
+                                        title={p}
+                                    >
+                                        {p.length > 32 ? p.slice(0, 32) + '…' : p}
+                                    </button>
+                                ))}
+                            </div>
                             <textarea
                                 value={videoPrompt}
                                 onChange={e => setVideoPrompt(e.target.value)}
-                                placeholder="Describe the video you want to create… (e.g. A cinematic shot of a wolf running through a snowy forest)"
+                                placeholder="Describe the video you want to create…"
                                 rows={4}
                                 className="w-full px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 text-xs text-gray-200 placeholder-gray-600 focus:outline-none focus:border-orange-500/50 resize-none"
                             />

@@ -95,6 +95,8 @@ const ImageAnalyzer: React.FC = () => {
     };
 
     const clearAll = () => {
+        if (items.length === 0) return;
+        if (!window.confirm(`Remove all ${items.length} image${items.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
         items.forEach(item => { if (item.preview.startsWith('blob:')) URL.revokeObjectURL(item.preview); if (item.originalPreview.startsWith('blob:')) URL.revokeObjectURL(item.originalPreview); });
         setItems([]); localStorage.removeItem('imageDrafts'); setGlobalError(null);
     };

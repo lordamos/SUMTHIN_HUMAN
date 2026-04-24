@@ -246,12 +246,17 @@ const BatchItemCard: React.FC<BatchItemCardProps> = ({
                         <p className="text-xs text-gray-400 truncate flex-1" title={item.file.name}>{item.file.name}</p>
                         <button
                             onClick={() => onUpdate(item.id, { precisionMode: !item.precisionMode })}
-                            title="Toggle Precision Mode — uses face/body detection for smarter edits"
+                            title="Toggle Precision Mode — detects faces and body first, then uses their exact coordinates to guide the AI edit for much more accurate results"
                             className={`ml-2 flex-shrink-0 flex items-center gap-1 text-[10px] font-black px-2 py-1 rounded-full transition-all ${item.precisionMode ? 'bg-orange-500/30 border border-orange-400/50 text-orange-300' : 'bg-white/5 border border-white/10 text-gray-500 hover:text-orange-400 hover:border-orange-500/30'}`}
                         >
                             🎯 {item.precisionMode ? 'PRECISION ON' : 'PRECISION'}
                         </button>
                     </div>
+                    {item.precisionMode && (
+                        <p className="text-[9px] text-orange-400/70 px-1 -mt-0.5">
+                            Face & body coordinates detected before each edit — slower but more accurate on portraits
+                        </p>
+                    )}
 
                     {/* Filter selector */}
                     <div className="flex gap-1.5 flex-wrap px-1">
