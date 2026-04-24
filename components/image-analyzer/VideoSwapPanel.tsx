@@ -89,6 +89,7 @@ const VideoSwapPanel: React.FC = () => {
     const [videoFile, setVideoFile] = useState<File | null>(null);
     const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null);
     const [videoDuration, setVideoDuration] = useState<number | null>(null);
+    const [videoFps, setVideoFps] = useState<number | null>(null);
     const [faceFile, setFaceFile] = useState<File | null>(null);
     const [facePreview, setFacePreview] = useState<string | null>(null);
     const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
@@ -359,6 +360,9 @@ const VideoSwapPanel: React.FC = () => {
 
                 setProgress(data.progress ?? 0);
                 setFrameInfo({ current: data.frame ?? 0, total: data.total ?? 0 });
+                if (data.source_fps && data.source_fps > 0) {
+                    setVideoFps(data.source_fps);
+                }
 
                 if (data.status === 'done') {
                     stopPolling();
@@ -416,6 +420,7 @@ const VideoSwapPanel: React.FC = () => {
         setVideoFile(file);
         setVideoThumbnail(null);
         setVideoDuration(null);
+        setVideoFps(null);
         setDownloadUrl(null);
         e.target.value = '';
 
@@ -646,10 +651,10 @@ const VideoSwapPanel: React.FC = () => {
 
     const isLongVideo = warningThreshold !== null && videoDuration !== null && videoDuration > warningThreshold;
 
-    const ASSUMED_VIDEO_FPS = 25;
     const estimatedProcessingSeconds = (() => {
         if (!videoDuration || !jobStats?.processing_fps || jobStats.processing_fps <= 0) return null;
-        return Math.ceil((videoDuration * ASSUMED_VIDEO_FPS) / jobStats.processing_fps);
+        const sourceFps = videoFps ?? 25;
+        return Math.ceil((videoDuration * sourceFps) / jobStats.processing_fps);
     })();
 
     const formatEstimatedTime = (seconds: number): string => {

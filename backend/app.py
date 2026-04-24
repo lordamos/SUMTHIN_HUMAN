@@ -543,6 +543,7 @@ def video_progress_route(job_id: str):
         "frame": job["frame"],
         "total": job["total"],
         "error": job.get("error"),
+        "source_fps": job.get("source_fps"),
     })
 
 
@@ -940,6 +941,19 @@ def _run_video_job(job_id: str, video_path: str, source_img, pre_output_path: st
     global _avg_processing_fps
     job = _video_jobs[job_id]
     cancel_event: threading.Event = job["cancel_event"]
+
+    # Read the source video's actual FPS early so the frontend can use it for
+    # accurate ETA estimates instead of the hardcoded 25 fps fallback.
+    try:
+        import cv2 as _cv2
+        _probe = _cv2.VideoCapture(video_path)
+        if _probe.isOpened():
+            _raw_fps = _probe.get(_cv2.CAP_PROP_FPS)
+            if _raw_fps and _raw_fps > 0:
+                job["source_fps"] = float(_raw_fps)
+        _probe.release()
+    except Exception:
+        pass
 
     def on_progress(frame_num: int, total_frames: int):
         job["frame"] = frame_num
