@@ -603,18 +603,19 @@ import threading
 import time
 import job_store
 
-# In-memory session store: token -> {"src_face": ..., "created_at": float}
-# Sessions are evicted after _WEBCAM_SESSION_TTL seconds of inactivity.
-_WEBCAM_SESSION_TTL = 300  # 5 minutes
+# In-memory session store: token -> {"src_face": <InsightFace embedding>, "last_used": float}
+# Sessions are evicted after _WEBCAM_SESSION_TTL seconds of inactivity so that
+# abandoned browser sessions (user closes tab without clicking Stop) do not
+# accumulate embedding objects in memory indefinitely.
+_WEBCAM_SESSION_TTL = int(os.environ.get("WEBCAM_SESSION_TTL", 300))  # default 5 minutes
 _webcam_sessions: dict = {}
 
 
 def _evict_webcam_sessions():
-    """Background loop that removes sessions older than _WEBCAM_SESSION_TTL."""
+    """Background loop that removes sessions idle longer than _WEBCAM_SESSION_TTL."""
     while True:
-        import time as _time
-        _time.sleep(60)
-        cutoff = _time.time() - _WEBCAM_SESSION_TTL
+        time.sleep(60)
+        cutoff = time.time() - _WEBCAM_SESSION_TTL
         stale = [t for t, v in list(_webcam_sessions.items()) if v.get("last_used", 0) < cutoff]
         for t in stale:
             _webcam_sessions.pop(t, None)
