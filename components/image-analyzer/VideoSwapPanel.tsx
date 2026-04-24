@@ -110,10 +110,12 @@ const VideoSwapPanel: React.FC = () => {
     const [liveFaceFile, setLiveFaceFile] = useState<File | null>(null);
     const [liveFacePreview, setLiveFacePreview] = useState<string | null>(null);
     const [liveError, setLiveError] = useState<string | null>(null);
+    const [showOriginal, setShowOriginal] = useState(true);
     const liveFaceInputRef = useRef<HTMLInputElement>(null);
 
     const liveVideoRef = useRef<HTMLVideoElement | null>(null);
     const liveCanvasRef = useRef<HTMLCanvasElement | null>(null);
+    const liveWebcamDisplayRef = useRef<HTMLVideoElement | null>(null);
     const liveResultRef = useRef<HTMLImageElement | null>(null);
     const liveSessionRef = useRef<string | null>(null);
     const liveActiveRef = useRef<boolean>(false);
@@ -529,6 +531,9 @@ const VideoSwapPanel: React.FC = () => {
         if (liveVideoRef.current) {
             liveVideoRef.current.srcObject = null;
         }
+        if (liveWebcamDisplayRef.current) {
+            liveWebcamDisplayRef.current.srcObject = null;
+        }
         if (liveResultRef.current && liveResultRef.current.src.startsWith('blob:')) {
             URL.revokeObjectURL(liveResultRef.current.src);
             liveResultRef.current.src = '';
@@ -619,6 +624,10 @@ const VideoSwapPanel: React.FC = () => {
                     v.onloadedmetadata = () => resolve();
                 });
                 await liveVideoRef.current.play();
+            }
+            if (liveWebcamDisplayRef.current) {
+                liveWebcamDisplayRef.current.srcObject = mediaStream;
+                await liveWebcamDisplayRef.current.play().catch(() => {});
             }
 
             if (liveCanvasRef.current && liveVideoRef.current) {
@@ -1170,9 +1179,9 @@ const VideoSwapPanel: React.FC = () => {
                 <motion.div key="live-mode" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} className="space-y-4">
                     <p className="text-xs text-gray-500 text-center">Stream your webcam feed with your face swapped in real time.</p>
 
-                    {/* Hidden elements used for frame capture */}
-                    <video ref={liveVideoRef} autoPlay playsInline muted className="hidden" />
+                    {/* Hidden elements that must stay in the DOM at all times */}
                     <canvas ref={liveCanvasRef} className="hidden" />
+                    <video ref={liveVideoRef} autoPlay playsInline muted className="hidden" />
 
                     <div
                         onClick={() => liveFaceInputRef.current?.click()}
@@ -1213,21 +1222,49 @@ const VideoSwapPanel: React.FC = () => {
                         </button>
                     </div>
 
-                    <div className="rounded-2xl overflow-hidden border border-rose-400/20 bg-black/40 relative min-h-[200px] flex items-center justify-center">
-                        {liveActive && (
-                            <div className="absolute top-2 left-2 z-10 flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-500/80 text-white text-[9px] font-black uppercase tracking-wider">
+                    {/* Live status bar + toggle — only shown while active */}
+                    {liveActive && (
+                        <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-500/80 text-white text-[9px] font-black uppercase tracking-wider">
                                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse inline-block"></span>
                                 LIVE
-                            </div>
-                        )}
-                        {!liveActive && (
+                            </span>
+                            <button
+                                onClick={() => setShowOriginal(v => !v)}
+                                className="text-[10px] font-semibold px-2.5 py-1 rounded-lg border transition-all border-white/10 bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200"
+                            >
+                                {showOriginal ? 'Hide original' : 'Show original'}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Inactive placeholder */}
+                    {!liveActive && (
+                        <div className="rounded-2xl overflow-hidden border border-rose-400/20 bg-black/40 min-h-[200px] flex items-center justify-center">
                             <p className="text-xs text-gray-600 py-8">Live preview will appear here when streaming starts</p>
-                        )}
-                        <img
-                            ref={liveResultRef}
-                            alt="Live webcam face swap"
-                            className={`w-full rounded-2xl ${liveActive ? '' : 'hidden'}`}
-                        />
+                        </div>
+                    )}
+
+                    {/* Always-rendered panels — CSS controls visibility so refs stay stable */}
+                    <div className={liveActive ? `grid gap-3 ${showOriginal ? 'grid-cols-2' : 'grid-cols-1'}` : 'hidden'}>
+                        <div className={`rounded-2xl overflow-hidden border border-white/10 bg-black/40 flex flex-col ${liveActive && showOriginal ? '' : 'hidden'}`}>
+                            <p className="text-[9px] font-bold text-gray-500 uppercase tracking-wider text-center py-1.5">Original</p>
+                            <video
+                                ref={liveWebcamDisplayRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                className="w-full object-cover"
+                            />
+                        </div>
+                        <div className="rounded-2xl overflow-hidden border border-rose-400/20 bg-black/40 flex flex-col">
+                            <p className="text-[9px] font-bold text-gray-500 uppercase tracking-wider text-center py-1.5">Swapped</p>
+                            <img
+                                ref={liveResultRef}
+                                alt="Live webcam face swap"
+                                className="w-full object-cover"
+                            />
+                        </div>
                     </div>
                 </motion.div>
             )}
