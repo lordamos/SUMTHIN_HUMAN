@@ -948,6 +948,13 @@ const VideoSwapPanel: React.FC = () => {
                                                     >
                                                         Load
                                                     </button>
+                                                    <button
+                                                        onClick={() => removeRecentJob(job.id)}
+                                                        title="Dismiss"
+                                                        className="text-[10px] shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-white/10 text-gray-600 hover:text-gray-300 transition-colors"
+                                                    >
+                                                        ✕
+                                                    </button>
                                                 </div>
                                             );
                                         })}
