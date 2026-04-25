@@ -929,10 +929,12 @@ const VideoSwapPanel: React.FC = () => {
                                                 cancelled: 'cancelled',
                                                 unknown: '?',
                                             };
+                                            const ageSeconds = (Date.now() - job.timestamp) / 1000;
                                             return (
                                                 <div key={job.id} className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/8">
                                                     <span className={`text-[9px] font-bold uppercase shrink-0 ${statusColor[job.status]}`}>{statusLabel[job.status]}</span>
                                                     <span className="flex-1 font-mono text-[10px] text-gray-300 truncate">{job.id}</span>
+                                                    <span className="text-[9px] text-gray-500 shrink-0">{formatAge(ageSeconds)} ago</span>
                                                     {job.status === 'done' && (
                                                         <a
                                                             href={`/video-result/${job.id}`}
