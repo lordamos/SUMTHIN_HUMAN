@@ -29,7 +29,25 @@ def _connect() -> sqlite3.Connection:
     return conn
 
 
-_STATS_HISTORY_MAX = 60
+def _parse_positive_int(env_name: str, default: int) -> int:
+    raw = os.getenv(env_name, "")
+    if raw:
+        try:
+            val = int(raw)
+            if val < 1:
+                raise ValueError("must be >= 1")
+            return val
+        except ValueError as exc:
+            import sys
+            print(
+                f"[job_store] WARNING: {env_name}={raw!r} is invalid ({exc}); "
+                f"using default {default}",
+                file=sys.stderr,
+            )
+    return default
+
+
+_STATS_HISTORY_MAX = _parse_positive_int("STATS_HISTORY_SIZE", 60)
 
 
 def init_db() -> None:

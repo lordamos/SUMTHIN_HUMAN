@@ -455,7 +455,22 @@ def admin_dashboard():
         stats_url += "?" + qs
         history_url += "?" + qs
         list_url += "?" + qs
-    return render_template("admin.html", stats_url=stats_url, history_url=history_url, list_url=list_url, key_param=key_param)
+    _total_secs = job_store._STATS_HISTORY_MAX * _STATS_SAMPLE_INTERVAL
+    if _total_secs < 60:
+        _window_label = f"last {_total_secs}s"
+    elif _total_secs < 3600:
+        _window_label = f"last {_total_secs // 60} min"
+    else:
+        _window_label = f"last {_total_secs / 3600:.1f} hr"
+    return render_template(
+        "admin.html",
+        stats_url=stats_url,
+        history_url=history_url,
+        list_url=list_url,
+        key_param=key_param,
+        stats_window_label=_window_label,
+        stats_history_size=job_store._STATS_HISTORY_MAX,
+    )
 
 
 @app.route("/health", methods=["GET"])
@@ -896,10 +911,11 @@ _cleanup_thread = threading.Thread(target=_cleanup_video_jobs, daemon=True)
 _cleanup_thread.start()
 
 # ---------------------------------------------------------------------------
-# Background stats recorder — samples job counts + disk usage every 5 s and
-# persists the snapshot so the admin dashboard can show history after refresh.
+# Background stats recorder — samples job counts + disk usage every
+# STATS_SAMPLE_INTERVAL seconds (default 5, env-configurable) and persists the
+# snapshot so the admin dashboard can show history after refresh.
 # ---------------------------------------------------------------------------
-_STATS_SAMPLE_INTERVAL = 5  # seconds
+_STATS_SAMPLE_INTERVAL = job_store._parse_positive_int("STATS_SAMPLE_INTERVAL", 5)  # seconds
 
 
 def _record_stats_loop() -> None:
@@ -1174,9 +1190,10 @@ def video_jobs_stats():
 def video_jobs_history():
     """Return persisted stats snapshots for the admin dashboard history charts.
 
-    Returns up to 60 records (the last ~5 minutes sampled at 5-second intervals)
-    so the chart can be prefilled after a page refresh.  Protected by the same
-    ADMIN_SECRET credential as /video-jobs/stats.
+    Returns up to STATS_HISTORY_SIZE records (default 60, configurable via env
+    var) sampled every STATS_SAMPLE_INTERVAL seconds (default 5 s) so the chart
+    can be prefilled after a page refresh.  Protected by the same ADMIN_SECRET
+    credential as /video-jobs/stats.
     """
     if not _admin_authorized():
         return Response(

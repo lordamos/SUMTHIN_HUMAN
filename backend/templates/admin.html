@@ -497,7 +497,7 @@
   <!-- History chart -->
   <div class="card">
     <div class="card-top-bar"></div>
-    <h2>Job Count History (last 60 readings)</h2>
+    <h2>Job Count History ({{ stats_window_label }})</h2>
     <div class="chart-wrap">
       <canvas id="history-chart"></canvas>
     </div>
@@ -506,7 +506,7 @@
   <!-- Storage history chart -->
   <div class="card">
     <div class="card-top-bar"></div>
-    <h2>Disk Usage History (last 60 readings)</h2>
+    <h2>Disk Usage History ({{ stats_window_label }})</h2>
     <div class="chart-wrap">
       <canvas id="storage-chart"></canvas>
     </div>
@@ -566,7 +566,7 @@
   }
 
   // ── History buffers (client-side rolling window) ─────────────────────────
-  const MAX_HISTORY = 60;
+  const MAX_HISTORY = {{ stats_history_size }};
   const historyLabels = [];
   const historyTotal = [];
   const historyRunning = [];
